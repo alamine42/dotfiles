@@ -1,0 +1,60 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git restore:*)",
+      "Bash(git checkout:*)",
+      "Bash(git rm:*)",
+      "Bash(npm:*)",
+      "Bash(npx:*)",
+      "Bash(node:*)",
+      "Bash(docker:*)",
+      "Bash(docker-compose:*)",
+      "Bash(curl:*)",
+      "Bash(jq:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(tree:*)",
+      "Bash(echo:*)",
+      "Bash(timeout:*)",
+      "Bash(kill:*)",
+      "Bash(pkill:*)",
+      "Bash(lsof:*)",
+      "Bash(open:*)",
+      "Bash(psql:*)",
+      "Bash(redis-cli:*)",
+      "Bash(railway:*)",
+      "Bash(bd:*)",
+      "WebSearch"
+    ],
+    "deny": [],
+    "defaultMode": "acceptEdits"
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl -s -d \"Claude stopped in $(basename $PWD)\" ntfy.sh/${NTFY_TOPIC:-cloudcc}"
+          }
+        ]
+      }
+    ],
+    "postToolCall": [
+      {
+        "matcher": "AskUserQuestion",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl -s -d \"Claude needs your input in $(basename $PWD)\" ntfy.sh/${NTFY_TOPIC:-cloudcc}"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,84 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(railway:*)",
+      "Bash(PGPASSWORD=':*' psql:*)",
+      "Bash(PGPASSWORD:*)",
+      "WebSearch",
+      "Bash(npm test)",
+      "Bash(git add:*)",
+      "Bash(git push:*)",
+      "Bash(npm test:*)",
+      "Bash(git restore:*)",
+      "Bash(git commit:*)",
+      "Bash(grep:*)",
+      "Bash(xargs:*)",
+      "Bash(cat:*)",
+      "Bash(npm run:*)",
+      "Bash(railway:*)",
+      "Bash(npx tsc:*)",
+      "Bash(curl:*)",
+      "Bash(psql:*)",
+      "Bash(docker:*)",
+      "Bash(lsof:*)",
+      "Bash(docker:*)",
+      "Bash(pkill:*)",
+      "Bash(npm run:*)",
+      "Bash(ls:*)",
+      "Bash(docker-compose:*)",
+      "Bash(TOKEN:*)",
+      "Bash(npx playwright test:*)",
+      "Bash(jq:*)",
+      "Bash(open:*)",
+      "Bash(find:*)",
+      "Bash(timeout 180 npx playwright:*",
+      "Bash(npm run seed:*)",
+      "Bash(node:*)",
+      "Bash(printenv:*)",
+      "Bash(brew services:*)",
+      "Bash(launchctl list:*)",
+      "Bash(launchctl unload:*)",
+      "Bash(unset:*)",
+      "Bash(timeout:*)",
+      "Bash(kill:*)",
+      "Bash(brew install:*)",
+      "Bash(bash:*)",
+      "Bash(git rm:*)",
+      "Bash(BASE_URL=https://alkemy-admin-staging.up.railway.app timeout:*)",
+      "Bash(PGPASSWORD=:*)",
+      "Bash(npm install)",
+      "Bash(redis-cli:*)",
+      "Bash(tree:*)",
+      "mcp__railway__link-service",
+      "mcp__railway__set-variables",
+      "Bash(npm install:*)",
+      "Bash(npm audit:*)",
+      "Bash(COACH_BASE_URL=https://alkemycoachstg-staging.up.railway.app:*)",
+      "Bash(python3:*)",
+      "Bash(mcp__railway__list-variables:*)",
+      "Bash(npx next build:*)",
+      "Bash(git checkout:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(bd:*)",
+      "Bash(echo:*)",
+      "mcp__railway__link-environment",
+      "Bash(npm run db:setup:*)",
+      "Skill(task)"
+    ],
+    "deny": [],
+    "ask": [],
+    "defaultMode": "acceptEdits"
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "afplay /System/Library/Sounds/Funk.aiff"
+          }
+        ]
+      }
+    ]
+  }
+}
