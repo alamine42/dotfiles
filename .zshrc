@@ -44,7 +44,7 @@ alias gd='git diff'
 alias gds='git diff --staged'
 alias ga='git add'
 alias gc='git commit'
-alias gp='git push'
+# gp is a function below (with notifications)
 alias gpl='git pull'
 alias gl='git log --oneline -20'
 alias gco='git checkout'
@@ -74,6 +74,19 @@ claude-notify() {
     local exit_code=$?
     notify "Claude finished in $(basename "$PWD") (exit: $exit_code)"
     return $exit_code
+}
+
+# Git push with notification
+gp() {
+    local branch=$(git branch --show-current 2>/dev/null)
+    local repo=$(basename "$(git remote get-url origin 2>/dev/null)" .git 2>/dev/null || basename "$PWD")
+
+    if git push "$@"; then
+        notify "Push succeeded: $branch -> $repo"
+    else
+        notify "Push FAILED: $branch -> $repo"
+        return 1
+    fi
 }
 
 # ----- Project helpers -----

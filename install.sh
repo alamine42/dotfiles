@@ -19,6 +19,67 @@ if [[ ! -f "$DOTFILES/install.sh" ]]; then
     exit 1
 fi
 
+# ----- Dependency Installation -----
+DEPS=(fzf tmux)  # starship and micro installed separately
+
+install_deps_apt() {
+    echo ""
+    echo "Installing dependencies via apt..."
+    sudo apt update
+    sudo apt install -y fzf tmux curl
+
+    # Install starship
+    if ! command -v starship &> /dev/null; then
+        echo "Installing starship..."
+        curl -sS https://starship.rs/install.sh | sh -s -- -y
+    fi
+
+    # Install micro
+    if ! command -v micro &> /dev/null; then
+        echo "Installing micro..."
+        curl https://getmic.ro | bash
+        sudo mv micro /usr/local/bin/
+    fi
+}
+
+install_deps_brew() {
+    echo ""
+    echo "Installing dependencies via brew..."
+    if ! command -v brew &> /dev/null; then
+        echo "Homebrew not found. Please install it first: https://brew.sh"
+        echo "Skipping dependency installation."
+        return 0
+    fi
+    brew install fzf tmux starship micro
+}
+
+install_dependencies() {
+    echo ""
+    echo "Checking dependencies..."
+
+    local missing=()
+    for dep in fzf tmux starship micro; do
+        if ! command -v "$dep" &> /dev/null; then
+            missing+=("$dep")
+        fi
+    done
+
+    if [[ ${#missing[@]} -eq 0 ]]; then
+        echo "All dependencies already installed."
+        return 0
+    fi
+
+    echo "Missing: ${missing[*]}"
+
+    if [[ "$(uname)" == "Darwin" ]]; then
+        install_deps_brew
+    else
+        install_deps_apt
+    fi
+}
+
+install_dependencies
+
 # Create necessary directories
 mkdir -p "$HOME/.config"
 mkdir -p "$HOME/bin"
