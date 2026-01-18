@@ -1,0 +1,31 @@
+[user]
+    name = Mehdi El-Amine
+    email = alamine@gmail.com
+
+[init]
+    defaultBranch = main
+
+[core]
+    editor = micro
+    autocrlf = input
+
+[pull]
+    rebase = false
+
+[push]
+    default = current
+    autoSetupRemote = true
+
+[alias]
+    st = status
+    co = checkout
+    br = branch
+    ci = commit
+    df = diff
+    lg = log --oneline -20
+    last = log -1 HEAD
+    unstage = reset HEAD --
+    amend = commit --amend --no-edit
+
+[color]
+    ui = auto

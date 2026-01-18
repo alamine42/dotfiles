@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# Cloud Claude Code - Project Session Manager
+# ~/bin/sessionizer
+#
+# Creates or attaches to tmux sessions per project.
+# Auto-launches Claude Code when entering a new session.
+#
+# Usage:
+#   sessionizer           # fzf picker for projects
+#   sessionizer myproject # direct project name
+#   sessionizer /path     # absolute path
+
+set -euo pipefail
+
+PROJECT_DIR="${PROJECT_DIR:-$HOME/projects}"
+
+# Get project from argument or fzf picker
+if [[ $# -ge 1 ]]; then
+    input="$1"
+    # Check if it's an absolute path
+    if [[ "$input" = /* ]]; then
+        selected="$input"
+    # Check if it exists in projects dir
+    elif [[ -d "$PROJECT_DIR/$input" ]]; then
+        selected="$PROJECT_DIR/$input"
+    else
+        echo "Project not found: $input"
+        echo "Available projects:"
+        ls -1 "$PROJECT_DIR" 2>/dev/null || echo "  (none)"
+        exit 1
+    fi
+else
+    # Use fzf to pick a project
+    if ! command -v fzf &> /dev/null; then
+        echo "fzf not installed. Install it or provide project name directly."
+        exit 1
+    fi
+
+    selected=$(find "$PROJECT_DIR" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | \
+        sort | \
+        fzf --prompt="Project: " --height=40% --reverse) || exit 0
+fi
+
+# Validate selection
+[[ -z "$selected" ]] && exit 0
+[[ ! -d "$selected" ]] && { echo "Not a directory: $selected"; exit 1; }
+
+# Create session name from directory (replace dots with underscores)
+session_name=$(basename "$selected" | tr '.' '_')
+
+# Check if we should auto-launch Claude
+auto_claude="${AUTO_CLAUDE:-true}"
+
+# Create session if it doesn't exist
+if ! tmux has-session -t="$session_name" 2>/dev/null; then
+    tmux new-session -ds "$session_name" -c "$selected"
+
+    # Auto-launch Claude Code in the new session
+    if [[ "$auto_claude" == "true" ]]; then
+        tmux send-keys -t "$session_name" "claude" Enter
+    fi
+fi
+
+# Attach or switch to session
+if [[ -z "${TMUX:-}" ]]; then
+    # Not in tmux, attach directly
+    tmux attach -t "$session_name"
+else
+    # Already in tmux, switch client
+    tmux switch-client -t "$session_name"
+fi
