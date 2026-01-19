@@ -121,6 +121,29 @@ link_file "$DOTFILES/bin/sessionizer" "$HOME/bin/sessionizer"
 chmod +x "$HOME/bin/sessionizer"
 
 echo ""
+echo "Configuring Claude MCP servers..."
+if command -v claude &> /dev/null; then
+    # Add Playwright MCP for UI testing
+    if ! claude mcp list 2>/dev/null | grep -q "playwright"; then
+        claude mcp add --transport stdio playwright -- npx -y @playwright/mcp@latest
+        echo "  Added Playwright MCP"
+    else
+        echo "  Playwright MCP already configured"
+    fi
+
+    # Install Playwright browser dependencies (Chromium only for headless server)
+    if ! npx -y playwright install --dry-run chromium 2>/dev/null | grep -q "already installed"; then
+        echo "  Installing Playwright browsers (this may take a moment)..."
+        npx -y playwright install --with-deps chromium
+        echo "  Installed Playwright browsers"
+    else
+        echo "  Playwright browsers already installed"
+    fi
+else
+    echo "  Claude CLI not found, skipping MCP setup"
+fi
+
+echo ""
 echo "Done!"
 echo ""
 echo "Next steps:"
