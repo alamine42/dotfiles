@@ -121,6 +121,16 @@ link_file "$DOTFILES/bin/sessionizer" "$HOME/bin/sessionizer"
 chmod +x "$HOME/bin/sessionizer"
 
 echo ""
+echo "Linking Claude skills..."
+mkdir -p "$HOME/.claude/skills"
+for skill_dir in "$DOTFILES/.claude/skills"/*/; do
+    if [[ -d "$skill_dir" ]]; then
+        skill_name=$(basename "$skill_dir")
+        link_file "$skill_dir" "$HOME/.claude/skills/$skill_name"
+    fi
+done
+
+echo ""
 echo "Configuring Claude MCP servers..."
 if command -v claude &> /dev/null; then
     # Add Playwright MCP for UI testing
