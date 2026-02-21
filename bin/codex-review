@@ -1,0 +1,306 @@
+#!/usr/bin/env bash
+#
+# codex-review.sh — AI-powered code review via Codex CLI
+#
+# Captures uncommitted git changes (staged + unstaged) and sends them
+# to Codex CLI for an independent code review covering security, logic,
+# style, performance, architecture, and simplicity.
+#
+# Usage: codex-review.sh [-C <dir>] [-m <model>] [--staged-only] [--unstaged-only]
+#                        [--no-context] [-o <file>] [-h]
+
+set -euo pipefail
+
+# =============================================================================
+# Constants & Defaults
+# =============================================================================
+
+readonly SCRIPT_NAME="$(basename "$0")"
+readonly DEFAULT_MODEL="gpt-5.3-codex"
+readonly DIFF_LINE_WARNING_THRESHOLD=5000
+
+# Project context files to look for (order matters for prompt coherence)
+readonly CONTEXT_FILES=(
+  "CLAUDE.md"
+  "README.md"
+  "package.json"
+  "pyproject.toml"
+  "Cargo.toml"
+  "go.mod"
+)
+
+# Mutable defaults
+target_dir="."
+model="$DEFAULT_MODEL"
+diff_mode="head"        # "head" = staged+unstaged, "cached" = staged only, "working" = unstaged only
+gather_context=true
+output_file=""
+
+# =============================================================================
+# Usage
+# =============================================================================
+
+usage() {
+  cat <<EOF
+Usage: $SCRIPT_NAME [OPTIONS]
+
+AI-powered code review of uncommitted changes using Codex CLI.
+
+Options:
+  -C, --dir <dir>        Target git repository directory (default: .)
+  -m, --model <model>    Codex model to use (default: $DEFAULT_MODEL)
+      --staged-only      Only review staged changes (git diff --cached)
+      --unstaged-only    Only review unstaged changes (git diff)
+      --no-context       Skip gathering project context files
+  -o, --output <file>    Also write review output to a file
+  -h, --help             Show this help message
+
+Examples:
+  $SCRIPT_NAME                           # Review all changes in current repo
+  $SCRIPT_NAME -C ~/project              # Review changes in ~/project
+  $SCRIPT_NAME --staged-only             # Review only staged changes
+  $SCRIPT_NAME -m o3 -o review.md        # Use o3 model, save output to file
+EOF
+  exit 0
+}
+
+# =============================================================================
+# Argument Parsing
+# =============================================================================
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -C|--dir)
+      target_dir="$2"
+      shift 2
+      ;;
+    -m|--model)
+      model="$2"
+      shift 2
+      ;;
+    --staged-only)
+      diff_mode="cached"
+      shift
+      ;;
+    --unstaged-only)
+      diff_mode="working"
+      shift
+      ;;
+    --no-context)
+      gather_context=false
+      shift
+      ;;
+    -o|--output)
+      output_file="$2"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      ;;
+    *)
+      echo "Error: Unknown option '$1'" >&2
+      echo "Run '$SCRIPT_NAME --help' for usage." >&2
+      exit 1
+      ;;
+  esac
+done
+
+# =============================================================================
+# Validation
+# =============================================================================
+
+# Check codex is installed
+codex_bin=""
+if command -v codex &>/dev/null; then
+  codex_bin="$(command -v codex)"
+elif [[ -x "/opt/homebrew/bin/codex" ]]; then
+  codex_bin="/opt/homebrew/bin/codex"
+else
+  echo "Error: Codex CLI not found." >&2
+  echo "Install it from: https://github.com/openai/codex" >&2
+  exit 1
+fi
+
+# Resolve target directory to absolute path
+original_dir="$target_dir"
+target_dir="$(cd "$target_dir" 2>/dev/null && pwd)" || {
+  echo "Error: Directory '$original_dir' does not exist or is not accessible." >&2
+  exit 1
+}
+
+# Check we're in a git repo
+if ! git -C "$target_dir" rev-parse --is-inside-work-tree &>/dev/null; then
+  echo "Error: '$target_dir' is not inside a git repository." >&2
+  exit 1
+fi
+
+# =============================================================================
+# Diff Collection
+# =============================================================================
+
+# Handle initial commit case (no HEAD yet)
+has_head=true
+if ! git -C "$target_dir" rev-parse HEAD &>/dev/null; then
+  has_head=false
+fi
+
+# Build diff command based on mode
+if [[ "$has_head" == false ]]; then
+  # No commits yet — diff staged files against empty tree
+  case "$diff_mode" in
+    head|cached) diff_cmd=(git -C "$target_dir" diff --cached) ;;
+    working)     diff_cmd=(git -C "$target_dir" diff) ;;
+  esac
+else
+  case "$diff_mode" in
+    head)    diff_cmd=(git -C "$target_dir" diff HEAD) ;;
+    cached)  diff_cmd=(git -C "$target_dir" diff --cached) ;;
+    working) diff_cmd=(git -C "$target_dir" diff) ;;
+  esac
+fi
+
+diff_output="$("${diff_cmd[@]}" 2>/dev/null)" || true
+
+if [[ -z "$diff_output" ]]; then
+  case "$diff_mode" in
+    head)    scope="staged or unstaged" ;;
+    cached)  scope="staged" ;;
+    working) scope="unstaged" ;;
+  esac
+  echo "No $scope changes found. Nothing to review." >&2
+  exit 0
+fi
+
+# Count diff lines and warn if large
+diff_lines="$(printf '%s\n' "$diff_output" | wc -l | tr -d ' ')"
+if [[ "$diff_lines" -gt "$DIFF_LINE_WARNING_THRESHOLD" ]]; then
+  echo "Warning: Diff is $diff_lines lines (threshold: $DIFF_LINE_WARNING_THRESHOLD)." >&2
+  echo "Large diffs may be truncated or degrade review quality." >&2
+  echo "Consider reviewing smaller change sets." >&2
+  echo "" >&2
+fi
+
+# =============================================================================
+# Project Context Gathering
+# =============================================================================
+
+context_block=""
+
+if [[ "$gather_context" == true ]]; then
+  for ctx_file in "${CONTEXT_FILES[@]}"; do
+    filepath="$target_dir/$ctx_file"
+    if [[ -f "$filepath" ]]; then
+      # Truncate large files to first 200 lines
+      file_content="$(head -200 "$filepath")"
+      context_block+="
+--- $ctx_file ---
+$file_content
+"
+    fi
+  done
+fi
+
+# =============================================================================
+# Prompt Construction
+# =============================================================================
+
+# Determine diff scope description
+case "$diff_mode" in
+  head)    diff_scope="all uncommitted changes (staged and unstaged)" ;;
+  cached)  diff_scope="staged changes only" ;;
+  working) diff_scope="unstaged changes only" ;;
+esac
+
+# Build the review prompt
+prompt="You are an expert code reviewer performing a thorough review of ${diff_scope} in a software project.
+
+## Your Review Dimensions
+
+Analyze the diff across these six dimensions:
+
+1. **Security Vulnerabilities** — Injection flaws, authentication/authorization issues, data exposure, unsafe deserialization, hardcoded secrets, path traversal, SSRF, XSS, CSRF, insecure cryptography.
+
+2. **Logic Bugs** — Off-by-one errors, incorrect boolean logic, race conditions, null/undefined handling, missing edge cases, incorrect state transitions, broken error handling, unreachable code.
+
+3. **Code Style & Consistency** — Naming conventions, formatting inconsistencies with the surrounding codebase, dead code, unclear variable names, missing or misleading comments, violation of project conventions.
+
+4. **Performance** — Unnecessary allocations, N+1 queries, missing indexes, O(n^2) where O(n) is possible, redundant computation, blocking calls in async contexts, memory leaks, cache misses.
+
+5. **Architecture Harmony** — Does the change fit the existing architecture? Separation of concerns, dependency direction, abstraction level consistency, API design, module boundaries.
+
+6. **Code Simplicity** — Unnecessary complexity, over-engineering, code that could be simplified, duplicated logic that should be extracted, overly clever constructs that hurt readability.
+
+## Output Format
+
+For each finding, use this format:
+
+### [SEVERITY] Title
+- **File:** \`path/to/file\`
+- **Line(s):** L42-L47
+- **Dimension:** Security | Logic | Style | Performance | Architecture | Simplicity
+- **Description:** What the issue is and why it matters.
+- **Suggestion:** How to fix or improve it.
+
+Severity levels:
+- **CRITICAL** — Must fix. Security vulnerability, data loss risk, or crash-inducing bug.
+- **WARNING** — Should fix. Logic error, significant performance issue, or architectural concern.
+- **SUGGESTION** — Nice to have. Style improvement, minor optimization, or readability enhancement.
+- **PRAISE** — Highlight something done well. Good patterns, clean abstractions, thoughtful error handling.
+
+## Rules
+- Be specific. Reference exact file paths and line numbers from the diff.
+- Be constructive. Every criticism should include a concrete suggestion.
+- Be proportional. Do not nitpick trivial formatting if there are critical security issues.
+- If the diff is clean and well-written, say so. Do not manufacture issues.
+- Do not suggest changes outside the scope of the diff.
+
+## Summary
+
+End your review with a summary section:
+
+### Summary
+- **Total findings:** X critical, Y warnings, Z suggestions, W praise
+- **Overall assessment:** One-paragraph summary of the change quality and key recommendations.
+- **Risk level:** Low / Medium / High — based on the severity and count of findings.
+"
+
+# Append project context if gathered
+if [[ -n "$context_block" ]]; then
+  prompt+="
+## Project Context
+
+The following project files provide context about the codebase conventions, dependencies, and architecture. Do NOT review these files — only use them as background context for understanding the project.
+
+$context_block"
+fi
+
+# Append the diff
+prompt+="
+## Diff to Review
+
+\`\`\`diff
+$diff_output
+\`\`\`"
+
+# =============================================================================
+# Codex Invocation
+# =============================================================================
+
+# Build codex command
+codex_args=(
+  "$codex_bin" exec
+  --sandbox read-only
+  -m "$model"
+  -C "$target_dir"
+)
+
+# Add output file flag if specified
+if [[ -n "$output_file" ]]; then
+  codex_args+=(-o "$output_file")
+fi
+
+# Pass prompt via stdin
+printf '%s' "$prompt" | "${codex_args[@]}" -
+
+# Exit with codex's exit code
+exit $?

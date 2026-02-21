@@ -119,6 +119,16 @@ echo ""
 echo "Linking scripts..."
 link_file "$DOTFILES/bin/sessionizer" "$HOME/bin/sessionizer"
 chmod +x "$HOME/bin/sessionizer"
+link_file "$DOTFILES/bin/codex-review" "$HOME/bin/codex-review"
+chmod +x "$HOME/bin/codex-review"
+
+echo ""
+echo "Linking Claude Code commands..."
+mkdir -p "$HOME/.claude/commands"
+for cmd in "$DOTFILES/claude-commands"/*.md; do
+    [[ -f "$cmd" ]] || continue
+    link_file "$cmd" "$HOME/.claude/commands/$(basename "$cmd")"
+done
 
 echo ""
 echo "Linking Claude skills..."

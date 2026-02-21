@@ -11,6 +11,8 @@ Minimal dotfiles for remote development with Claude Code on a DigitalOcean dropl
 | `.gitconfig` | Git settings and aliases |
 | `starship.toml` | Minimal prompt config |
 | `bin/sessionizer` | Project session manager |
+| `bin/codex-review` | AI code review via Codex CLI |
+| `claude-commands/` | Global Claude Code slash commands |
 
 ## Installation
 
@@ -78,6 +80,18 @@ Then use `cn` (claude-notify) to get push notifications when tasks complete.
 | `Ctrl-a s` | Session picker |
 | `Ctrl-a r` | Reload config |
 | `Alt-1..5` | Switch windows (no prefix) |
+
+### Codex Review
+
+AI-powered code review of uncommitted changes using Codex CLI:
+
+```bash
+codex-review                    # review all changes in current repo
+codex-review --staged-only      # only staged changes
+codex-review -m o3 -o review.md # use o3, save to file
+```
+
+Also available as `/codex-review` in any Claude Code session.
 
 ## Customization
 
