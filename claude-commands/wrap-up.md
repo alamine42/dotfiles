@@ -10,4 +10,6 @@ This file should cover:
 
 If there is an existing HANDOVER.md file, overwrite it.
 
+Note: HANDOVER.md should be in .gitignore
+
 Then exit the session.

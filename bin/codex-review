@@ -16,7 +16,7 @@ set -euo pipefail
 # =============================================================================
 
 readonly SCRIPT_NAME="$(basename "$0")"
-readonly DEFAULT_MODEL="gpt-5.3-codex"
+readonly DEFAULT_MODEL="gpt-5-codex"
 readonly DIFF_LINE_WARNING_THRESHOLD=5000
 
 # Project context files to look for (order matters for prompt coherence)

@@ -9,3 +9,5 @@ This file should cover:
 - A map of important files
 
 If there is an existing HANDOVER.md file, overwrite it.
+
+HANDOVER.md should be in .gitignore
