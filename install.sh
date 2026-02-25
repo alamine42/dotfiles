@@ -124,11 +124,8 @@ chmod +x "$HOME/bin/codex-review"
 
 echo ""
 echo "Linking Claude Code commands..."
-mkdir -p "$HOME/.claude/commands"
-for cmd in "$DOTFILES/claude-commands"/*.md; do
-    [[ -f "$cmd" ]] || continue
-    link_file "$cmd" "$HOME/.claude/commands/$(basename "$cmd")"
-done
+mkdir -p "$HOME/.claude"
+link_file "$DOTFILES/claude-commands" "$HOME/.claude/commands"
 
 echo ""
 echo "Linking Claude skills..."
