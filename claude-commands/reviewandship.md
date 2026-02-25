@@ -1,6 +1,6 @@
 Run the /improve-ux-feature command and incorporate its recommendations intelligently.
 
-Run /codex-review then address / fix all the issues raised. Then run it one more time for good measure, and fix those issues too.
+Run /codex-review then address / fix all the issues raised. Then run it one more time for good measure, and fix those issues too. Do not stop the codex review unless it exceeds 30 mins.
 
 Then run tests and confirm they all pass. If any fail, fix those too.
 

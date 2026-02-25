@@ -29,7 +29,19 @@
       "Bash(redis-cli:*)",
       "Bash(railway:*)",
       "Bash(bd:*)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(git pull:*)",
+      "Bash(git stash:*)",
+      "Bash(git stash pop:*)",
+      "Bash(command -v:*)",
+      "Bash(bd list:*)",
+      "Bash(bd init:*)",
+      "Bash(bd create:*)",
+      "Bash(git -C /Users/mehdielamine/Development/dotfiles status)",
+      "Bash(git -C /Users/mehdielamine/Development/dotfiles diff)",
+      "Bash(git -C /Users/mehdielamine/Development/dotfiles add settings.local.json docs/generalized-settings.md .beads/ .gitattributes AGENTS.md)",
+      "Bash(git -C:*)",
+      "Bash(git -C /Users/mehdielamine/Development/dotfiles push)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits"
