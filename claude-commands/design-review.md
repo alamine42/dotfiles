@@ -14,7 +14,7 @@ If you can't determine what feature is being planned, ask the user.
 
 Verify that there are design artifacts to review. The design-review script looks for: PLAN.md, DESIGN.md, SPEC.md, TODO.md, ARCHITECTURE.md, and docs/ equivalents. It also pulls Beads tasks automatically.
 
-If no design artifacts exist, create a new design artifact for feature (markdown file) and name something specific to this feature.
+If no design artifacts exist, create a new design artifact for feature (markdown file) and name something specific to this feature, save under docs/.
 
 If the design lives in files with non-standard names, note them — you'll pass them via `-f` flags.
 

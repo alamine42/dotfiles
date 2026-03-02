@@ -1,3 +1,9 @@
+1/ Handle committed and untracked files (ask for input if you need it).
+
+2/ Close all relevant tasks (for which the work is complete).
+
+3/ Write the handover documentation:
+
 Look back through everything we did together in this session and generate a HANDOVER.md file.
 
 This file should cover:

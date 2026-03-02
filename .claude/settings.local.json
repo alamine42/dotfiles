@@ -45,28 +45,5 @@
     ],
     "deny": [],
     "defaultMode": "acceptEdits"
-  },
-  "hooks": {
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "curl -s -d \"Claude stopped in $(basename $PWD)\" ntfy.sh/${NTFY_TOPIC:-cloudcc}"
-          }
-        ]
-      }
-    ],
-    "postToolCall": [
-      {
-        "matcher": "AskUserQuestion",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "curl -s -d \"Claude needs your input in $(basename $PWD)\" ntfy.sh/${NTFY_TOPIC:-cloudcc}"
-          }
-        ]
-      }
-    ]
   }
 }
