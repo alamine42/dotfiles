@@ -41,7 +41,9 @@
       "Bash(git -C /Users/mehdielamine/Development/dotfiles diff)",
       "Bash(git -C /Users/mehdielamine/Development/dotfiles add settings.local.json docs/generalized-settings.md .beads/ .gitattributes AGENTS.md)",
       "Bash(git -C:*)",
-      "Bash(git -C /Users/mehdielamine/Development/dotfiles push)"
+      "Bash(git -C /Users/mehdielamine/Development/dotfiles push)",
+      "Bash(scp:*)",
+      "Bash(ssh:*)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits"

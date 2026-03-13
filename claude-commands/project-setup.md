@@ -5,4 +5,4 @@ Imagine you were to break this project down into sprints and tasks. Every task/t
 
 When you're done reviewing the suggested improvements, create tasks, epics, sprint plans, etc, ask me whether I want to set up beads tasks (https://github.com/steveyegge/beads) for task management or LInear (or both with Beads to LInear sync). 
 
-Then create appropriate epics & tasks (or projects & issues in Linear). Make sure that every epic/project has clear success critera, a suite of e2e tests, performance checks and security review.
+Then create appropriate epics/projects & issues/tasks. Make sure that every epic/project has clear success critera, a suite of e2e tests, performance checks and security review.
