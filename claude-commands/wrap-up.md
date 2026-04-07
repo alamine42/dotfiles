@@ -1,6 +1,6 @@
 1/ Handle committed and untracked files (ask for input if you need it).
 
-2/ Close all relevant tasks (for which the work is complete).
+2/ Invoke the /linear-update command to review completed work in this session and update all relevant tasks -- check to see if Issues are tracked in Linear and update them there.
 
 3/ Write the handover documentation:
 
