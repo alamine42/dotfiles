@@ -32,6 +32,15 @@ alias l='ls -lh'
 alias ..='cd ..'
 alias ...='cd ../..'
 
+# ----- Python/venv aliases -----
+alias python='python3'
+alias act='source venv/bin/activate 2>/dev/null || source .venv/bin/activate'
+alias mkenv='python3 -m venv venv'
+
+# ----- Shell config aliases -----
+alias bp='${EDITOR:-vi} ~/.zshrc'
+alias sbp='source ~/.zshrc'
+
 # ----- Session management -----
 alias s='sessionizer'
 alias t='tmux'
