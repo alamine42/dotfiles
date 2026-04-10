@@ -32,6 +32,12 @@ Unit tests pass → /ship
 └─────────────────────────────────────┘
         ↓
 ┌─────────────────────────────────────┐
+│  PHASE 3.5: Consolidate Learnings   │
+│  • Run /consolidate if fixes applied│
+│  • Capture problems & solutions     │
+└─────────────────────────────────────┘
+        ↓
+┌─────────────────────────────────────┐
 │  PHASE 4: Document Feature          │
 │  • Write FEATURE_<name>.md          │
 │  • Context, design, tradeoffs       │
@@ -48,6 +54,7 @@ Unit tests pass → /ship
 │  • Auto-generate commit message     │
 │  • Git commit and push              │
 │  • Close Beads task, sync to Linear │
+│  • Show next available tasks        │
 └─────────────────────────────────────┘
 ```
 
@@ -221,6 +228,35 @@ bd add "[Security] <issue description>" --epic <current-epic-if-known>
 ```
 
 Report progress as you go.
+
+---
+
+## PHASE 3.5: Consolidate Learnings
+
+If non-trivial fixes were implemented in Phase 3 (especially security fixes, bug fixes, or issues that revealed surprising behavior), run `/consolidate` to capture the learnings.
+
+### When to Consolidate
+
+Run `/consolidate` if ANY of these are true:
+- A CRITICAL or HIGH severity security issue was fixed
+- A bug or logic error was discovered and fixed
+- The fix revealed non-obvious behavior or a gotcha
+- The solution required investigation or wasn't immediately apparent
+
+### Skip Consolidation If
+
+- Only minor style/simplification changes were made
+- All fixes were trivial (typos, formatting, obvious improvements)
+- No `IMPLEMENT_NOW` items were processed
+
+### Execute
+
+If consolidation is warranted:
+1. Invoke the `/consolidate` skill
+2. Let it extract the problem/solution from the current session
+3. It will create a doc in `docs/solutions/{category}/`
+
+This ensures valuable debugging insights are captured before moving to feature documentation.
 
 ---
 
@@ -462,6 +498,16 @@ bd close $TASK_ID
 bd linear sync --push
 ```
 
+### Show Next Tasks
+
+List upcoming tasks so the user knows what's next:
+
+```bash
+bd list --status pending --limit 5
+```
+
+Store as `NEXT_TASKS` for the final report.
+
 ---
 
 ## Final Report
@@ -475,13 +521,19 @@ Show summary:
 📁 Files changed: <count>
 🔧 Fixes applied: <count>
 📝 Tasks created: <count>
-📄 Documentation: docs/features/FEATURE_<name>.md
+📄 Feature doc: docs/features/FEATURE_<name>.md
+📚 Solution doc: docs/solutions/<category>/<slug>.md (if created)
 🧪 Tests: passing
 📤 Pushed to: <branch>
 ✔️ Task closed in Beads + Linear
 
 New tasks created:
 - <task-id>: <description>
+- ...
+
+📋 Next up:
+- <task-id>: <task-title>
+- <task-id>: <task-title>
 - ...
 ```
 
