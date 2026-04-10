@@ -8,7 +8,10 @@ Tests should FAIL initially (no implementation exists). Only after tests are wri
 For each task, Only write enough code to pass the current tests, nothing more. Then, Refactor the implementation to improve code quality.
 Tests must stay green after refactoring.
 
-IMPORTANT: at all times, you must use best software engineering practices. Follow these principles:
+IMPORTANT: 
+1/ Complete all the tasks in an epic without interruption, unless you need input from me
+2/ If any tests produce fake or test data or artifacts, those data and artfiacts must be cleaned upon test completion
+3/ at all times, you must use best software engineering practices. Follow these principles:
 
 KISS (Keep It Simple, Stupid): Avoid over-engineering. Simple, readable code is easier to maintain and test.
 DRY (Don't Repeat Yourself): Avoid code duplication by creating reusable modules, functions, or classes.
