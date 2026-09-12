@@ -2,7 +2,7 @@
 # ~/.zshrc
 
 # ----- Path -----
-export PATH="$HOME/bin:$HOME/.local/bin:$PATH"
+export PATH="$HOME/bin:$HOME/Development/bin:$HOME/.local/bin:$PATH"
 
 # ----- History -----
 HISTFILE=~/.zsh_history

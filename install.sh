@@ -10,6 +10,13 @@ set -euo pipefail
 
 DOTFILES="${DOTFILES:-$HOME/.dotfiles}"
 
+# Scripts go where each platform already keeps them and has them on PATH.
+if [[ "$(uname)" == "Darwin" ]]; then
+    BINDIR="${BINDIR:-$HOME/Development/bin}"
+else
+    BINDIR="${BINDIR:-$HOME/bin}"
+fi
+
 echo "Installing dotfiles from $DOTFILES..."
 
 # Ensure we're in the right place
@@ -82,7 +89,7 @@ install_dependencies
 
 # Create necessary directories
 mkdir -p "$HOME/.config"
-mkdir -p "$HOME/bin"
+mkdir -p "$BINDIR"
 mkdir -p "$HOME/projects"
 
 # Backup existing files
@@ -117,11 +124,16 @@ link_file "$DOTFILES/starship.toml" "$HOME/.config/starship.toml"
 
 echo ""
 echo "Linking scripts..."
-link_file "$DOTFILES/bin/sessionizer" "$HOME/bin/sessionizer"
-link_file "$DOTFILES/bin/claude-audit" "$HOME/Development/bin/claude-audit"
-chmod +x "$HOME/bin/sessionizer"
-link_file "$DOTFILES/bin/codex-review" "$HOME/bin/codex-review"
-chmod +x "$HOME/bin/codex-review"
+echo "  Target: $BINDIR"
+for script in sessionizer codex-review claude-audit; do
+    link_file "$DOTFILES/bin/$script" "$BINDIR/$script"
+    chmod +x "$DOTFILES/bin/$script"
+done
+
+case ":$PATH:" in
+    *":$BINDIR:"*) ;;
+    *) echo "  Warning: $BINDIR is not on your PATH" ;;
+esac
 
 echo ""
 echo "Linking Claude Code commands..."
