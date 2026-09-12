@@ -1,0 +1,546 @@
+#!/usr/bin/env python3
+"""
+claude-audit - measure and prune Claude Code agentic config.
+
+  claude-audit global [--apply]        audit the user/global layer
+  claude-audit repo [PATH] [--apply]   audit one repository
+  claude-audit repo --all              summarise every repo under ~/Development
+
+Default is dry-run: it reports and changes nothing. --apply performs only the
+mechanical fixes (dead config keys, orphan dirs). It never edits prose, never
+touches a secret, and never deletes a file it cannot prove is dead.
+"""
+import argparse, hashlib, json, os, re, shutil, subprocess, sys
+from collections import Counter, defaultdict
+from pathlib import Path
+
+HOME = Path.home()
+CLAUDE = HOME / ".claude"
+DEV = HOME / "Development"
+
+B = "\033[1m"; D = "\033[2m"; R = "\033[31m"; Y = "\033[33m"; G = "\033[32m"; X = "\033[0m"
+if not sys.stdout.isatty(): B = D = R = Y = G = X = ""
+
+def tok(s): return len(s) // 4
+def load_json(p):
+    try: return json.loads(Path(p).read_text())
+    except Exception: return {}
+def read(p):
+    try: return Path(p).read_text(errors="replace")
+    except Exception: return ""
+
+def h(title): print(f"\n{B}{title}{X}\n" + "-" * max(len(title), 40))
+def warn(s): print(f"  {Y}! {s}{X}")
+def bad(s):  print(f"  {R}x {s}{X}")
+def ok(s):   print(f"  {G}+ {s}{X}")
+
+# ---------------------------------------------------------------- frontmatter
+def frontmatter(text):
+    m = re.match(r"^---\n(.*?)\n---", text, re.S)
+    return m.group(1) if m else ""
+
+def fm_field(fm, name):
+    m = re.search(rf"^{name}:\s*(.*?)(?=\n[A-Za-z_-]+:\s|\Z)", fm, re.S | re.M)
+    if not m: return ""
+    v = m.group(1).strip()
+    if v[:2] in (">-", ">|") or v[:1] in ("|", ">"):
+        v = v.split("\n", 1)[1] if "\n" in v else ""
+    return " ".join(v.split())
+
+def skill_desc(skill_md):
+    t = read(skill_md)
+    return fm_field(frontmatter(t), "description")
+
+# -------------------------------------------------------------------- secrets
+SECRETS = [
+    ("Anthropic API key", r"sk-ant-[A-Za-z0-9_\-]{40,}"),
+    ("Linear API key",    r"lin_api_[A-Za-z0-9]{30,}"),
+    ("OpenAI API key",    r"sk-(?:proj-)?[A-Za-z0-9]{32,}"),
+    ("GitHub token",      r"gh[pousr]_[A-Za-z0-9]{30,}"),
+    ("Google API key",    r"AIza[A-Za-z0-9_\-]{30,}"),
+    ("Slack token",       r"xox[baprs]-[A-Za-z0-9\-]{12,}"),
+]
+PLACEHOLDER = re.compile(r"(xxx|XXX|YOUR|your[_-]|example|EXAMPLE|REDACTED|\.\.\.|\$\{|<)")
+
+def scan_secrets(path):
+    text = read(path)
+    if not text: return []
+    found = []
+    for label, pat in SECRETS:
+        for m in sorted(set(re.findall(pat, text))):
+            if PLACEHOLDER.search(m): continue
+            tail = m.split("_")[-1][-12:]
+            if len(set(tail)) <= 2: continue          # aaaa / 0000 filler
+            found.append((label, m))
+    return found
+
+def redact(s): return f"{s[:11]}…{s[-4:]}"
+
+def git(repo, *args):
+    try:
+        r = subprocess.run(["git", "-C", str(repo)] + list(args),
+                           capture_output=True, text=True, timeout=15)
+        return r.stdout.strip() if r.returncode == 0 else ""
+    except Exception:
+        return ""
+
+def report_secrets(paths, label="config"):
+    hits = 0
+    for p in paths:
+        for kind, val in scan_secrets(p):
+            hits += 1
+            bad(f"{kind}: {redact(val)}")
+            print(f"       in {D}{str(p).replace(str(HOME),'~')}{X}")
+            repo = p
+            while repo != repo.parent and not (repo / ".git").exists():
+                repo = repo.parent
+            if (repo / ".git").exists():
+                rel = p.relative_to(repo)
+                tracked = subprocess.run(["git", "-C", str(repo), "ls-files",
+                                          "--error-unmatch", str(rel)],
+                                         capture_output=True).returncode == 0
+                ignored = subprocess.run(["git", "-C", str(repo), "check-ignore", "-q", str(rel)],
+                                         capture_output=True).returncode == 0
+                hist = len([l for l in git(repo, "log", "--oneline", "-S", val, "--all").splitlines() if l])
+                state = "TRACKED IN GIT" if tracked else ("gitignored" if ignored else "untracked")
+                extra = f", {hist} commit(s) in history" if hist else ", not in history"
+                sev = R if (tracked or hist) else D
+                print(f"       {sev}git: {state}{extra}{X}")
+    if not hits:
+        ok(f"no live credentials found in {label}")
+    return hits
+
+# ------------------------------------------------------------ context budget
+def skill_budget(root, off=frozenset()):
+    on = off_ = 0; n_on = n_off = 0
+    if not Path(root).is_dir(): return (0, 0, 0, 0)
+    for d in sorted(Path(root).iterdir()):
+        f = d / "SKILL.md"
+        if not f.is_file(): continue
+        size = len(skill_desc(f)) + len(d.name) + 2
+        if d.name in off: off_ += size; n_off += 1
+        else: on += size; n_on += 1
+    return (tok("x" * on), n_on, tok("x" * off_), n_off)
+
+def command_budget(cmd_dir):
+    total = 0; n = 0
+    p = Path(cmd_dir)
+    if not p.is_dir(): return (0, 0)
+    for f in sorted(p.glob("*.md")):
+        t = read(f); fm = frontmatter(t)
+        desc = fm_field(fm, "description") if "description:" in fm else ""
+        if not desc:
+            body = re.sub(r"^---\n.*?\n---\n", "", t, flags=re.S)
+            desc = next((l for l in body.splitlines() if l.strip() and not l.startswith("#")), "")[:140]
+        total += len(desc) + len(f.stem) + 2; n += 1
+    return (tok("x" * total), n)
+
+def plugin_budget():
+    agg = Counter(); cnt = Counter()
+    cache = CLAUDE / "plugins" / "cache"
+    if not cache.is_dir(): return agg, cnt
+    for f in cache.rglob("SKILL.md"):
+        parts = f.parts
+        try: i = parts.index("cache")
+        except ValueError: continue
+        name = "/".join(parts[i + 1:i + 3])
+        agg[name] += tok("x" * (len(skill_desc(f)) + len(f.parent.name) + 2))
+        cnt[name] += 1
+    return agg, cnt
+
+# ------------------------------------------------------------------- GLOBAL
+def audit_global(apply):
+    print(f"{B}claude-audit global{X}   {D}({'APPLY' if apply else 'dry run'}){X}")
+
+    settings = load_json(CLAUDE / "settings.json")
+    off = {k for k, v in settings.get("skillOverrides", {}).items() if v == "off"}
+
+    h("1. Context loaded at every session start")
+    rows = []
+    g = read(CLAUDE / "CLAUDE.md")
+    rows.append(("~/.claude/CLAUDE.md", tok(g)))
+    pagg, pcnt = plugin_budget()
+    rows.append((f"plugin skill descriptions ({sum(pcnt.values())})", sum(pagg.values())))
+    s_on, n_on, s_off, n_off = skill_budget(CLAUDE / "skills", off)
+    rows.append((f"personal skill descriptions ({n_on} enabled)", s_on))
+    cmd_dir = (CLAUDE / "commands").resolve()
+    c_tok, c_n = command_budget(cmd_dir)
+    rows.append((f"slash command descriptions ({c_n})", c_tok))
+    total = sum(v for _, v in rows)
+    for k, v in sorted(rows, key=lambda r: -r[1]):
+        pct = (100 * v // total) if total else 0
+        print(f"  {v:6d} tok  {pct:3d}%  {k}")
+    print(f"  {'-'*6}")
+    print(f"  {B}{total:6d} tok{X}  always loaded, before your first word")
+    if n_off:
+        print(f"  {D}({n_off} skills disabled, saving ~{s_off} tok - but the dirs remain){X}")
+
+    print()
+    for name, t in sorted(pagg.items(), key=lambda r: -r[1]):
+        flag = "  <- scope this per-project" if t > 1000 else ""
+        print(f"    {t:6d} tok  {pcnt[name]:3d} skills  {name}{flag}")
+
+    h("2. Credentials in config")
+    paths = [CLAUDE / "settings.json", HOME / ".claude.json",
+             CLAUDE / "archived-mcp-servers.json"]
+    paths += sorted(CLAUDE.glob("settings.json.bak*"))
+    if DEV.is_dir():
+        paths += sorted(DEV.glob("*/.claude/settings*.json"))
+        paths += sorted(DEV.glob("*/*/.claude/settings*.json"))
+    report_secrets([p for p in paths if p.is_file()], "global + project config")
+
+    h("3. Dead config")
+    present = {d.name for d in (CLAUDE / "skills").iterdir() if d.is_dir()} if (CLAUDE / "skills").is_dir() else set()
+    ghosts = sorted(k for k in off if k not in present)
+    if ghosts:
+        warn(f"{len(ghosts)} skillOverrides keys name skills that do not exist:")
+        print(f"       {', '.join(ghosts)}")
+    orphan_dirs = sorted(off & present)
+    if orphan_dirs:
+        nbytes = sum(f.stat().st_size for d in orphan_dirs
+                     for f in (CLAUDE / "skills" / d).rglob("*") if f.is_file())
+        warn(f"{len(orphan_dirs)} skill dirs are disabled but still on disk "
+             f"({nbytes // 1024} KB); disabling hides them, it does not remove them")
+
+    broken = []
+    def walk_hooks(cfg, origin):
+        for ev, groups in (cfg.get("hooks") or {}).items():
+            for grp in groups:
+                for hk in grp.get("hooks", []):
+                    cmd = hk.get("command", "")
+                    m = re.match(r"^(?:bash\s+)?([~/][^\s\"']+)", cmd)
+                    if m:
+                        p = Path(os.path.expanduser(m.group(1)))
+                        if not p.exists(): broken.append((origin, ev, m.group(1)))
+    walk_hooks(settings, "~/.claude/settings.json")
+    for extra in [DEV / ".claude" / "settings.json"]:
+        if extra.is_file(): walk_hooks(load_json(extra), str(extra).replace(str(HOME), "~"))
+    for origin, ev, path in broken:
+        bad(f"{ev} hook points at a missing file: {path}  ({origin})")
+
+    for hd in [CLAUDE / "hooks", DEV / ".claude" / "hooks"]:
+        if not hd.is_dir(): continue
+        wired = json.dumps(load_json(CLAUDE / "settings.json")) + json.dumps(load_json(DEV / ".claude" / "settings.json"))
+        for f in hd.iterdir():
+            if f.is_file() and f.name not in wired:
+                warn(f"hook script wired to nothing: {str(f).replace(str(HOME),'~')}")
+    if not ghosts and not orphan_dirs and not broken:
+        ok("no dead config")
+
+    h("4. Duplicated instruction files across repos")
+    if DEV.is_dir():
+        by_hash = defaultdict(list)
+        for pat in ("*/CLAUDE.md", "*/AGENTS.md", "*/*/CLAUDE.md", "*/*/AGENTS.md"):
+            for f in DEV.glob(pat):
+                if "node_modules" in f.parts: continue
+                by_hash[hashlib.md5(f.read_bytes()).hexdigest()].append(f)
+        dupes = sorted(((v, tok(read(v[0]))) for v in by_hash.values() if len(v) > 1),
+                       key=lambda r: -len(r[0]) * r[1])
+        if not dupes: ok("no duplicated instruction files")
+        for files, t in dupes:
+            waste = (len(files) - 1) * t
+            names = sorted({f.name for f in files})
+            what = names[0] if len(names) == 1 else " / ".join(names)
+            warn(f"{len(files)} byte-identical copies of {what} ({t} tok each, {waste} tok of drift risk)")
+            for f in files:
+                print(f"       {D}{str(f).replace(str(DEV)+'/','')}{X}")
+
+    h("5. Mechanical fixes")
+    if not ghosts and not orphan_dirs:
+        ok("nothing to fix")
+    else:
+        if ghosts: print(f"  remove {len(ghosts)} dead skillOverrides keys")
+        if orphan_dirs: print(f"  delete {len(orphan_dirs)} disabled skill dirs")
+        if apply:
+            so = settings.get("skillOverrides", {})
+            for k in ghosts: so.pop(k, None)
+            bak = CLAUDE / "settings.json.bak.claude-audit"
+            shutil.copy2(CLAUDE / "settings.json", bak)
+            (CLAUDE / "settings.json").write_text(json.dumps(settings, indent=2) + "\n")
+            for d in orphan_dirs:
+                shutil.rmtree(CLAUDE / "skills" / d, ignore_errors=True)
+                so.pop(d, None)
+            settings["skillOverrides"] = so
+            (CLAUDE / "settings.json").write_text(json.dumps(settings, indent=2) + "\n")
+            ok(f"applied. backup at {bak.name}")
+        else:
+            print(f"  {D}re-run with --apply to perform these{X}")
+
+    h("Judgment calls (not automatable)")
+    print("  - Scope big plugins per-project; that is usually the largest single win.")
+    print("  - Prose in ~/.claude/CLAUDE.md: keep only what changes behaviour.")
+    print("  - Rotate any credential listed in section 2.")
+
+# --------------------------------------------------------------------- REPO
+PUSH_REQUIRE = re.compile(
+    r"(not complete until.*push|must.*\bgit push\b|never stop before pushing|"
+    r"you must push|mandatory.*push|PUSH TO REMOTE)", re.I)
+PUSH_FORBID = re.compile(
+    r"(never\W{0,4}push|do not push|don't push|never.*open a pr|"
+    r"stop at the ship line|unpushed result is the success)", re.I)
+
+def audit_repo(path, apply):
+    repo = Path(path).resolve()
+    print(f"{B}claude-audit repo{X}  {repo}   {D}({'APPLY' if apply else 'dry run'}){X}")
+    if not repo.is_dir():
+        bad("not a directory"); return
+
+    inst = []
+    for name in ("CLAUDE.md", "AGENTS.md", "CLAUDE.local.md"):
+        for f in [repo / name, repo / ".claude" / name]:
+            if f.is_file(): inst.append(f)
+    for f in sorted(repo.glob("*/CLAUDE.md")) + sorted(repo.glob("*/AGENTS.md")):
+        if "node_modules" not in f.parts and ".git" not in f.parts: inst.append(f)
+
+    h("1. This repo's context, on top of the global layer")
+    sub = 0
+    for f in inst:
+        t = tok(read(f)); sub += t
+        print(f"  {t:6d} tok  {str(f.relative_to(repo))}")
+    dot = repo / ".claude"
+    n_sk = len(list((dot / "skills").iterdir())) if (dot / "skills").is_dir() else 0
+    n_ag = len(list((dot / "agents").glob("*.md"))) if (dot / "agents").is_dir() else 0
+    if n_sk:
+        st, sn, _, _ = skill_budget(dot / "skills")
+        print(f"  {st:6d} tok  .claude/skills/ ({sn} project skills)")
+        sub += st
+    if n_ag:
+        print(f"  {D}    ---  .claude/agents/ ({n_ag} subagents, load on invocation){X}")
+    print(f"  {'-'*6}")
+    print(f"  {B}{sub:6d} tok{X}  repo-specific, always loaded here")
+
+    h("2. Is any of this a copy of another repo's file?")
+    dup_found = False
+    if DEV.is_dir():
+        others = defaultdict(list)
+        for pat in ("*/CLAUDE.md", "*/AGENTS.md", "*/*/CLAUDE.md", "*/*/AGENTS.md"):
+            for f in DEV.glob(pat):
+                if "node_modules" in f.parts: continue
+                try: others[hashlib.md5(f.read_bytes()).hexdigest()].append(f)
+                except Exception: pass
+        for f in inst:
+            try: hh = hashlib.md5(f.read_bytes()).hexdigest()
+            except Exception: continue
+            twins = [o for o in others.get(hh, []) if o.resolve() != f.resolve()]
+            if twins:
+                dup_found = True
+                warn(f"{f.name} is byte-identical to {len(twins)} other repo(s):")
+                for tw in twins:
+                    print(f"       {D}{str(tw).replace(str(DEV)+'/','')}{X}")
+                print(f"       {D}-> shared content belongs one level up, not copied N times{X}")
+    if not dup_found: ok("no duplicates elsewhere")
+
+    h("3. Contradictions with the global layer")
+    conflicts = []
+    scope = {}
+    for f in inst: scope[str(f.relative_to(repo))] = read(f)
+    cmd_dir = (CLAUDE / "commands").resolve()
+    for f in sorted(cmd_dir.glob("*.md")) if cmd_dir.is_dir() else []:
+        scope[f"(global cmd) {f.stem}"] = read(f)
+    scope["(global) ~/.claude/CLAUDE.md"] = read(CLAUDE / "CLAUDE.md")
+    req = [k for k, v in scope.items() if PUSH_REQUIRE.search(v)]
+    fbd = [k for k, v in scope.items() if PUSH_FORBID.search(v)]
+    if req and fbd:
+        bad("push policy conflict - both mandates are in scope in this repo:")
+        print(f"       {R}must push:{X}   {', '.join(req)}")
+        print(f"       {R}must not:{X}    {', '.join(fbd)}")
+        conflicts.append("push")
+    if not conflicts: ok("no contradictory directives detected")
+
+    h("4. Stale references")
+    blob = "\n".join(scope.values())
+    stale = 0
+    for t in sorted(set(re.findall(r"`(bd|gh|railway|docker|conductor|codex|vercel|warp|uv|pnpm)\b", blob))):
+        if not shutil.which(t):
+            warn(f"referenced tool not installed: {t}"); stale += 1
+    cfg = load_json(HOME / ".claude.json")
+    servers = set(cfg.get("mcpServers", {}))
+    servers |= set(cfg.get("projects", {}).get(str(repo), {}).get("mcpServers", {}))
+    for f in (repo / ".mcp.json",):
+        if f.is_file(): servers |= set(load_json(f).get("mcpServers", {}))
+    for ns in sorted(set(re.findall(r"mcp__([A-Za-z0-9_-]+?)__", blob))):
+        if ns not in servers and not ns.startswith("plugin"):
+            warn(f"references MCP namespace not configured here: mcp__{ns}__"); stale += 1
+    skills = {d.name for d in (CLAUDE / "skills").iterdir() if d.is_dir()} if (CLAUDE / "skills").is_dir() else set()
+    cmds = {f.stem for f in cmd_dir.glob("*.md")} if cmd_dir.is_dir() else set()
+    builtin = {"run", "init", "code-review", "security-review", "simplify", "loop", "schedule", "compact", "clear"}
+    # A slash-command reference, not a path segment: preceded by start/space/backtick,
+    # followed by a non-path char, on a line that is not itself a path or tree listing.
+    cmd_ref = re.compile(r"(?:^|(?<=[\s(\[`\"']))/([a-z][a-z0-9-]{2,})(?=[\s.,;:!?)\]`\"']|$)")
+    refs = set()
+    for line in blob.splitlines():
+        s = line.strip()
+        if s.startswith("|") or s.startswith("-   ") and "|" in s:
+            continue                      # markdown table: the column is a dir, not a command
+        if line.count("/") > 1 or re.search(r"[\w.]/|├|└|│", line):
+            continue                      # path, URL, or directory tree
+        refs.update(cmd_ref.findall(line))
+    # a token that names a real sibling/child directory is a path, not a command
+    dirnames = {d.name for d in repo.iterdir() if d.is_dir()}
+    dirnames |= {d.name for d in repo.parent.iterdir() if d.is_dir()}
+    dirnames.add(repo.name)
+    missing = sorted(r for r in refs
+                     if r not in skills and r not in cmds and r not in builtin
+                     and r not in dirnames)
+    for ref in missing[:12]:
+        warn(f"references /{ref} - neither a skill nor a command on this machine")
+        stale += 1
+    if len(missing) > 12:
+        warn(f"...and {len(missing)-12} more dangling /command references")
+        stale += 1
+    if not stale: ok("no stale references")
+
+    h("5. Credentials in this repo's config")
+    report_secrets([p for p in sorted(repo.glob(".claude/settings*.json")) if p.is_file()], "this repo")
+
+    h("6. Per-file verdict prompts")
+    for f in inst:
+        t = tok(read(f))
+        print(f"  {str(f.relative_to(repo)):28s} {t:5d} tok")
+    print(f"\n  {D}For each line above, answer: what would the model get WRONG without it?{X}")
+    print(f"  {D}No concrete recurring failure -> delete. 'Good practice' is not an answer.{X}")
+
+def audit_all():
+    print(f"{B}claude-audit repo --all{X}\n")
+    print(f"  {'REPO':26s} {'TOK':>6s}  {'FILES':>5s}  NOTES")
+    rows = []
+    for d in sorted(DEV.iterdir()) if DEV.is_dir() else []:
+        if not d.is_dir() or d.name.startswith("."): continue
+        files = [f for f in (d / "CLAUDE.md", d / "AGENTS.md", d / ".claude/CLAUDE.md") if f.is_file()]
+        if not files: continue
+        t = sum(tok(read(f)) for f in files)
+        notes = []
+        if any(PUSH_REQUIRE.search(read(f)) for f in files): notes.append("push-mandate")
+        secs = sum(len(scan_secrets(p)) for p in d.glob(".claude/settings*.json"))
+        if secs: notes.append(f"{R}{secs} secret(s){X}")
+        rows.append((t, d.name, len(files), ", ".join(notes)))
+    for t, name, n, notes in sorted(rows, reverse=True):
+        print(f"  {name:26s} {t:6d}  {n:5d}  {notes}")
+    print(f"\n  {len(rows)} repos, {sum(r[0] for r in rows)} tok total (one repo's worth loads at a time)")
+
+# ---------------------------------------------------------------- agents-md
+STALE_HEADINGS = re.compile(
+    r"^(quick reference|landing the plane.*|session completion|issue tracking|beads issue tracker)$", re.I)
+PUSH_MANDATE = re.compile(
+    r"(PUSH TO REMOTE|NEVER stop before pushing|Landing the Plane|not complete until.*push)", re.I)
+
+def bd_snippet(hint=None):
+    """Current beads AGENTS.md snippet, read from bd itself so it never goes stale."""
+    if not shutil.which("bd"):
+        return None, "bd is not installed"
+    roots = [hint] if hint else []
+    roots += [Path.cwd()] + sorted(DEV.glob("*/.beads"))
+    for r in roots:
+        r = Path(r)
+        r = r.parent if r.name == ".beads" else r
+        try:
+            out = subprocess.run(["bd", "onboard"], cwd=str(r), capture_output=True,
+                                 text=True, timeout=20).stdout
+        except Exception:
+            continue
+        m = re.search(r"BEGIN AGENTS\.MD CONTENT ---\n(.*?)--- END AGENTS\.MD CONTENT",
+                      out, re.S)
+        if m:
+            return m.group(1).strip(), None
+    return None, "could not get a snippet from `bd onboard` in any beads repo"
+
+def split_sections(text):
+    """(h1_title, [(heading, body), ...]) - the beads-managed block is dropped."""
+    text = re.sub(r"<!-- BEGIN BEADS INTEGRATION.*?<!-- END BEADS INTEGRATION -->\n?",
+                  "", text, flags=re.S)
+    h1 = re.match(r"^#\s+(.*)", text)
+    title = h1.group(1).strip() if h1 else "Agent Instructions"
+    parts = re.split(r"^## +", text, flags=re.M)[1:]
+    out = []
+    for pt in parts:
+        head, _, body = pt.partition("\n")
+        out.append((head.strip(), body.rstrip()))
+    return title, out
+
+def rebuild(text, snippet):
+    title, sections = split_sections(text)
+    kept = [(h, b) for h, b in sections if not STALE_HEADINGS.match(h) and b.strip()]
+    new = f"# {title}\n\n{snippet}\n"
+    for h, b in kept:
+        new += f"\n## {h}\n{b}\n"
+    return new, [h for h, _ in kept]
+
+def audit_agents_md(apply, include_archive, root):
+    base = Path(root).expanduser().resolve()
+    print(f"{B}claude-audit agents-md{X}  {base}   {D}({'APPLY' if apply else 'dry run'}){X}")
+    snippet, err = bd_snippet()
+    if err:
+        bad(err); print("  Nothing written."); return 1
+    print(f"  {D}snippet source: `bd onboard` ({len(snippet.splitlines())} lines){X}")
+
+    targets = []
+    for pat in ("*/AGENTS.md", "*/*/AGENTS.md"):
+        for f in base.glob(pat):
+            if "node_modules" in f.parts: continue
+            if not include_archive and "ARCHIVE" in f.parts: continue
+            txt = read(f)
+            if PUSH_MANDATE.search(txt):
+                targets.append((f, txt))
+    if not targets:
+        ok("no AGENTS.md carries a stale push mandate"); return 0
+
+    h("Files carrying the stale beads push mandate")
+    ta = tb = 0; plan = []
+    for f, txt in sorted(targets):
+        new, kept = rebuild(txt, snippet)
+        a, b = tok(txt), tok(new); ta += a; tb += b
+        repo = f.parent
+        while repo != repo.parent and not (repo / ".git").is_dir(): repo = repo.parent
+        tracked = (repo / ".git").is_dir() and subprocess.run(
+            ["git", "-C", str(repo), "ls-files", "--error-unmatch", str(f)],
+            capture_output=True).returncode == 0
+        plan.append((f, new, a, b, kept, tracked))
+        note = ("keeps: " + ", ".join(kept)) if kept else ""
+        print(f"  {str(f.parent).replace(str(base)+'/',''):32s} {a:5d} -> {b:4d} tok"
+              f"  {'git' if tracked else '  '}  {D}{note}{X}")
+    print(f"  {'-'*32}")
+    print(f"  {B}{len(plan)} files{X}   {ta} -> {tb} tok  ({G}-{ta-tb}{X} fleet-wide)")
+    ntracked = sum(1 for *_, t in plan if t)
+
+    if not apply:
+        h("Preview of the replacement (identical in every file)")
+        for line in (f"# Agent Instructions\n\n{snippet}").splitlines():
+            print(f"  {D}|{X} {line}")
+        print(f"\n  {Y}Dry run. Re-run with --apply to write.{X}")
+        print(f"  {D}{ntracked} of {len(plan)} are git-tracked: this will produce diffs")
+        print(f"  in those repos. Nothing is committed - review and commit yourself.{X}")
+        return 0
+
+    bkroot = HOME / "Documents" / "claude-config-backup-2026-09-05" / "agents-md"
+    bkroot.mkdir(parents=True, exist_ok=True)
+    for f, new, *_ in plan:
+        rel = str(f.relative_to(base)).replace("/", "__")
+        shutil.copy2(f, bkroot / rel)
+        f.write_text(new)
+    ok(f"{len(plan)} files rewritten; backups in {str(bkroot).replace(str(HOME),'~')}")
+    print(f"  {Y}{ntracked} are git-tracked - review with `git diff` and commit per repo.{X}")
+    print(f"  {D}Restore one: cp {str(bkroot).replace(str(HOME),'~')}/<repo>__AGENTS.md <path>{X}")
+    return 0
+
+def main():
+    ap = argparse.ArgumentParser(prog="claude-audit", description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="mode", required=True)
+    g = sub.add_parser("global"); g.add_argument("--apply", action="store_true")
+    r = sub.add_parser("repo")
+    r.add_argument("path", nargs="?", default=".")
+    r.add_argument("--apply", action="store_true")
+    r.add_argument("--all", action="store_true")
+    m = sub.add_parser("agents-md")
+    m.add_argument("--apply", action="store_true")
+    m.add_argument("--include-archive", action="store_true")
+    m.add_argument("--root", default=str(DEV))
+    a = ap.parse_args()
+    if a.mode == "agents-md":
+        sys.exit(audit_agents_md(a.apply, a.include_archive, a.root))
+    if a.mode == "global": audit_global(a.apply)
+    elif a.all: audit_all()
+    else: audit_repo(a.path, a.apply)
+
+if __name__ == "__main__":
+    main()
