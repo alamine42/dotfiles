@@ -136,11 +136,6 @@ case ":$PATH:" in
 esac
 
 echo ""
-echo "Linking Claude Code commands..."
-mkdir -p "$HOME/.claude"
-link_file "$DOTFILES/claude-commands" "$HOME/.claude/commands"
-
-echo ""
 echo "Linking Claude skills..."
 mkdir -p "$HOME/.claude/skills"
 for skill_dir in "$DOTFILES/.claude/skills"/*/; do

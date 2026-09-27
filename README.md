@@ -12,7 +12,6 @@ Minimal dotfiles for remote development with Claude Code on a DigitalOcean dropl
 | `starship.toml` | Minimal prompt config |
 | `bin/sessionizer` | Project session manager |
 | `bin/codex-review` | AI code review via Codex CLI |
-| `claude-commands/` | Global Claude Code slash commands |
 | `.claude/skills/` | Global Claude Code skills |
 
 ## Installation

@@ -164,6 +164,6 @@ project.
 | Path | What it is |
 |---|---|
 | `dotfiles/bin/claude-audit` | the tool |
-| `dotfiles/claude-commands/audit-repo.md` | the `/audit-repo` command |
+| `dotfiles/.claude/skills/audit-repo/SKILL.md` | the `/audit-repo` skill |
 | `~/Development/bin/claude-audit` | symlink that puts it on the PATH |
 | `~/Documents/claude-config-backup-2026-09-05/` | backups of every file changed |
