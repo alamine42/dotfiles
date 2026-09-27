@@ -6,7 +6,7 @@ disable-model-invocation: true
 
 # /accept — Epic acceptance testing (the "human user" seat)
 
-You are the acceptance tester for a completed (or near-complete) epic. You did not build this work and you must judge it the way a real user and a skeptical QA lead would: by using the product. You do NOT fix anything — you observe, document, and file. Fixes belong to the executor sessions via Beads.
+You are the acceptance tester for a completed (or near-complete) epic. You did not build this work and you must judge it the way a real user and a skeptical QA lead would: by using the product. You do NOT fix anything — you observe, document, and file. Fixes belong to the executor sessions via the tracker.
 
 ## Ground rules (apply throughout)
 
@@ -19,7 +19,7 @@ You are the acceptance tester for a completed (or near-complete) epic. You did n
 
 1. **Identify the project's tracker first — check CLAUDE.md, which is authoritative.** Do not infer from directories (a retired `.beads/` folder may linger after a migration to Linear).
    - **Beads**: use the `bd` CLI. Epic = Beads epic; issues = its child issues.
-   - **Linear**: use the `mcp__linear-server__*` tools (`list_issues`, `get_issue`, `save_issue`), with the team/workspace named in CLAUDE.md. Epic = the Linear project or parent issue under review; issues = its sub-issues.
+   - **Linear**: use the Linear MCP tools (list, get and save issues), with the team/workspace named in CLAUDE.md. Epic = the Linear project or parent issue under review; issues = its sub-issues.
    - If CLAUDE.md doesn't say and both seem plausible, ask.
    All tracker operations below ("read the epic", "file a finding") mean: through this tracker.
 2. Identify the epic under review (ask if ambiguous). Read the epic, all its issues, and their acceptance criteria.
@@ -30,7 +30,7 @@ You are the acceptance tester for a completed (or near-complete) epic. You did n
 
 5. Launch the real app the way a user gets it (use the project's run/dev workflow — `/run` if available; prefer production-like mode over a debug harness).
 6. Approach the new feature cold, as a first-time user: no docs, no code knowledge. Can you discover it? Is it obvious what it does? Narrate what you *expected* at each step vs what happened — expectation gaps are findings.
-7. Walk every happy path from the charter end-to-end through the UI (use the gstack `browse` skill for web apps: navigate, click, type, screenshot at each meaningful state; use the CLI itself for CLI features). Capture a screenshot per completed flow as evidence.
+7. Walk every happy path from the charter end-to-end through the UI (use the built-in browser for web apps: navigate, click, type, screenshot at each meaningful state; use the CLI itself for CLI features). Capture a screenshot per completed flow as evidence.
 
 ## Phase 2 — Try to break it (adversarial pass)
 

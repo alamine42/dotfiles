@@ -6,7 +6,7 @@ disable-model-invocation: true
 
 You are the planner in a two-tier setup: you write the issue; a separate executor session with **zero context from this conversation** implements it. The issue body is the only channel between you — everything the executor needs must be in it.
 
-> **Tracker:** Use whatever tracker the project's CLAUDE.md declares — commonly **Beads** (`bd` CLI) or **Linear** (`mcp__linear-server__*` tools; team/workspace named there), but any tracker the project names (GitHub Issues via `gh`, etc.). CLAUDE.md is authoritative — a leftover `.beads/` dir may remain after a migration, so don't infer from directories. If CLAUDE.md names no tracker, ask me which to use. Mapping: epic ↔ project/parent issue; task ↔ issue/sub-issue. Run every tracker read/write through that tracker.
+> **Tracker:** Use whatever tracker the project's CLAUDE.md declares — commonly **Beads** (`bd` CLI) or **Linear** (the Linear MCP tools; team/workspace named there), but any tracker the project names (GitHub Issues via `gh`, etc.). CLAUDE.md is authoritative — a leftover `.beads/` dir may remain after a migration, so don't infer from directories. If CLAUDE.md names no tracker, ask me which to use. Mapping: epic ↔ project/parent issue; task ↔ issue/sub-issue. Run every tracker read/write through that tracker.
 
 If I haven't described the task yet, ask me for a 1–2 sentence description.
 

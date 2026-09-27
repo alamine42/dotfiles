@@ -120,12 +120,13 @@ echo "Linking dotfiles..."
 link_file "$DOTFILES/.zshrc" "$HOME/.zshrc"
 link_file "$DOTFILES/.tmux.conf" "$HOME/.tmux.conf"
 link_file "$DOTFILES/.gitconfig" "$HOME/.gitconfig"
+link_file "$DOTFILES/.gitignore_global" "$HOME/.gitignore_global"
 link_file "$DOTFILES/starship.toml" "$HOME/.config/starship.toml"
 
 echo ""
 echo "Linking scripts..."
 echo "  Target: $BINDIR"
-for script in sessionizer codex-review claude-audit; do
+for script in sessionizer codex-review design-review claude-audit; do
     link_file "$DOTFILES/bin/$script" "$BINDIR/$script"
     chmod +x "$DOTFILES/bin/$script"
 done

@@ -6,7 +6,7 @@ disable-model-invocation: true
 
 Adversarial design review of the current feature's plan. This catches architecture flaws, missing edge cases, UX gaps, and task plan issues BEFORE implementation begins.
 
-> **Tracker:** Check the project's CLAUDE.md for whether task tracking is **Beads** (`bd` CLI) or **Linear** (`mcp__linear-server__*` tools; team/workspace named there). CLAUDE.md is authoritative — a leftover `.beads/` dir may remain after a migration, so don't infer from directories. Mapping: epic ↔ Linear project or parent issue; task ↔ issue/sub-issue. Run every tracker read/write below through that tracker.
+> **Tracker:** Check the project's CLAUDE.md for whether task tracking is **Beads** (`bd` CLI) or **Linear** (the Linear MCP tools; team/workspace named there). CLAUDE.md is authoritative — a leftover `.beads/` dir may remain after a migration, so don't infer from directories. Mapping: epic ↔ Linear project or parent issue; task ↔ issue/sub-issue. Run every tracker read/write below through that tracker.
 
 Three review modes:
 - **Claude workflow review** (default, no extra cost): parallel adversarial reviewers + independent refutation pass, run via the Workflow tool.
@@ -80,7 +80,7 @@ const VERDICT_SCHEMA = {
 }
 
 const files = args.artifacts.join(', ')
-const brief = `Feature: ${args.summary}\nRead these design artifacts in full before reviewing: ${files}. Also check the project's tracker for the task plan if relevant (\`bd list\` for Beads, or Linear via mcp__linear-server__list_issues — the project's CLAUDE.md says which). You are reviewing the DESIGN, not implementation code.`
+const brief = `Feature: ${args.summary}\nRead these design artifacts in full before reviewing: ${files}. Also check the project's tracker for the task plan if relevant (\`bd list\` for Beads, or Linear via the Linear MCP tools — the project's CLAUDE.md says which). You are reviewing the DESIGN, not implementation code.`
 
 const LENSES = [
   { key: 'architecture', focus: 'architecture flaws: wrong abstractions, coupling that will hurt later, scalability/performance dead-ends, missing failure handling, integration risks with the existing codebase' },

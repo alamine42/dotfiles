@@ -14,6 +14,4 @@ Let's use local dev prototype(s) in order to figure out the shape of the feature
 
 Additional rules:
 - Use the existing design systems, where possible
-- Ensure accessibility
 - Design for mobile first, ask me if you're unsure how the feature will be used (more mobile or more web)
-- 

@@ -1,7 +1,8 @@
 ---
 name: improve-ux
-description: Push the app's UI/UX to world-class polish, optimizing desktop and mobile separately.
-disable-model-invocation: true
+description: Improve the UI/UX of the app, or of the current feature with the `feature` argument. Run only when the user asks for it or another skill calls it; never on your own initiative.
+argument-hint: "[feature]"
 ---
 
-I still think there are strong opportunities to enhance the UI/UX look and feel and to make everything work better and be more intuitive, user-friendly, visually appealing, polished, slick, and world class in terms of following UI/UX best practices like those used by Stripe, don't you agree? And I want you to carefully consider desktop UI/UX and mobile UI/UX separately while doing this and hyper-optimize for both separately to play to the specifics of each modality. I'm looking for true world-class visual appeal, polish, slickness, etc. that makes people gasp at how stunning and perfect it is in every way.  Use ultrathink. And use the frontend engineer sub-agent if one is configured.
+Improve the UI/UX of the app, or of the current feature if the argument is `feature`.
+Review desktop and mobile separately, and optimize each for its own modality. Use the frontend-design and better-interface skills.

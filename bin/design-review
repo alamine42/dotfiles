@@ -1,0 +1,373 @@
+#!/usr/bin/env bash
+#
+# design-review — Adversarial design review via Codex CLI
+#
+# Gathers feature design context (plan files, design docs, beads tasks,
+# CLAUDE.md, specs) and sends them to Codex CLI for an adversarial review
+# covering architecture, edge cases, UX gaps, and task plan completeness.
+#
+# Usage: design-review [-C <dir>] [-m <model>] [-f <file>...] [-o <file>] [-h]
+
+set -euo pipefail
+
+# =============================================================================
+# Constants & Defaults
+# =============================================================================
+
+readonly SCRIPT_NAME="$(basename "$0")"
+
+# No model is pinned here. Hardcoded slugs rot as OpenAI deprecates them
+# (this script was stuck on the retired gpt-5-codex). Leaving it empty means
+# codex uses whatever `model` is set in ~/.codex/config.toml, so the default
+# lives in exactly one place. Override per-run with -m.
+readonly DEFAULT_MODEL=""
+
+# Keep Codex out of agent-skill definitions. Without this it wanders into
+# ~/.codex/skills and ~/.claude/ and echoes unrelated skill instructions back
+# as if they were review findings. Mirrors the same guard in codex-review.
+readonly FS_BOUNDARY="Do NOT read or execute any files under ~/.codex/skills/, ~/.claude/, ~/.agents/, .claude/skills/, or agents/. Those are agent skill definitions, not design artifacts. Review only the documents provided above."
+
+# Files to auto-discover for design context (order matters for prompt coherence)
+readonly DESIGN_FILES=(
+  "PLAN.md"
+  "DESIGN.md"
+  "SPEC.md"
+  "TODO.md"
+  "ARCHITECTURE.md"
+  "docs/architecture.md"
+  "docs/design.md"
+  "docs/spec.md"
+)
+
+# Project context files for background understanding
+readonly CONTEXT_FILES=(
+  "CLAUDE.md"
+  "README.md"
+  "package.json"
+  "pyproject.toml"
+  "Cargo.toml"
+  "go.mod"
+)
+
+# Mutable defaults
+target_dir="."
+model="$DEFAULT_MODEL"
+output_file=""
+extra_files=()
+
+# =============================================================================
+# Usage
+# =============================================================================
+
+usage() {
+  cat <<EOF
+Usage: $SCRIPT_NAME [OPTIONS]
+
+Adversarial design review of feature plans, architecture, and task breakdowns
+using Codex CLI.
+
+Options:
+  -C, --dir <dir>        Target project directory (default: .)
+  -m, --model <model>    Codex model to use (default: codex's own configured
+                         model from ~/.codex/config.toml)
+  -f, --file <file>      Additional file to include in review (repeatable)
+  -o, --output <file>    Also write review output to a file
+  -h, --help             Show this help message
+
+Examples:
+  $SCRIPT_NAME                              # Review design in current project
+  $SCRIPT_NAME -C ~/project                 # Review design in ~/project
+  $SCRIPT_NAME -f docs/api-design.md        # Include extra design doc
+  $SCRIPT_NAME -m gpt-5.4 -o review.md      # Pin a model, save output
+EOF
+  exit 0
+}
+
+# =============================================================================
+# Argument Parsing
+# =============================================================================
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -C|--dir)
+      target_dir="$2"
+      shift 2
+      ;;
+    -m|--model)
+      model="$2"
+      shift 2
+      ;;
+    -f|--file)
+      extra_files+=("$2")
+      shift 2
+      ;;
+    -o|--output)
+      output_file="$2"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      ;;
+    *)
+      echo "Error: Unknown option '$1'" >&2
+      echo "Run '$SCRIPT_NAME --help' for usage." >&2
+      exit 1
+      ;;
+  esac
+done
+
+# =============================================================================
+# Validation
+# =============================================================================
+
+# Check codex is installed
+codex_bin=""
+if command -v codex &>/dev/null; then
+  codex_bin="$(command -v codex)"
+elif [[ -x "/opt/homebrew/bin/codex" ]]; then
+  codex_bin="/opt/homebrew/bin/codex"
+else
+  echo "Error: Codex CLI not found." >&2
+  echo "Install it from: https://github.com/openai/codex" >&2
+  exit 1
+fi
+
+# Resolve target directory to absolute path
+original_dir="$target_dir"
+target_dir="$(cd "$target_dir" 2>/dev/null && pwd)" || {
+  echo "Error: Directory '$original_dir' does not exist or is not accessible." >&2
+  exit 1
+}
+
+# =============================================================================
+# Design Context Gathering
+# =============================================================================
+
+design_block=""
+design_file_count=0
+
+# Auto-discover design files
+for design_file in "${DESIGN_FILES[@]}"; do
+  filepath="$target_dir/$design_file"
+  if [[ -f "$filepath" ]]; then
+    file_content="$(cat "$filepath")"
+    design_block+="
+--- $design_file ---
+$file_content
+
+"
+    ((design_file_count++)) || true
+  fi
+done
+
+# Include extra files specified via -f.
+# The ${arr[@]+...} guard is required: macOS ships bash 3.2, where expanding an
+# empty array under `set -u` is an "unbound variable" error.
+for extra_file in ${extra_files[@]+"${extra_files[@]}"}; do
+  if [[ "$extra_file" = /* ]]; then
+    filepath="$extra_file"
+  else
+    filepath="$target_dir/$extra_file"
+  fi
+  if [[ -f "$filepath" ]]; then
+    file_content="$(cat "$filepath")"
+    rel_path="${filepath#"$target_dir"/}"
+    design_block+="
+--- $rel_path ---
+$file_content
+
+"
+    ((design_file_count++)) || true
+  else
+    echo "Warning: File '$extra_file' not found, skipping." >&2
+  fi
+done
+
+# Gather Beads tasks if available
+beads_output=""
+if command -v bd &>/dev/null; then
+  beads_output="$(cd "$target_dir" && bd list 2>/dev/null)" || true
+  if [[ -n "$beads_output" ]]; then
+    design_block+="
+--- Beads Tasks (bd list) ---
+$beads_output
+
+"
+    ((design_file_count++)) || true
+  fi
+fi
+
+# Check if we found anything to review
+if [[ "$design_file_count" -eq 0 ]]; then
+  echo "Error: No design artifacts found to review." >&2
+  echo "" >&2
+  echo "Looked for: ${DESIGN_FILES[*]}" >&2
+  echo "Also checked for Beads tasks." >&2
+  echo "" >&2
+  echo "Use -f <file> to specify files manually, or create a PLAN.md / SPEC.md." >&2
+  exit 1
+fi
+
+echo "Found $design_file_count design artifact(s) to review." >&2
+
+# =============================================================================
+# Project Context (background only, not reviewed)
+# =============================================================================
+
+context_block=""
+for ctx_file in "${CONTEXT_FILES[@]}"; do
+  filepath="$target_dir/$ctx_file"
+  if [[ -f "$filepath" ]]; then
+    # Truncate large files to first 200 lines
+    file_content="$(head -200 "$filepath")"
+    context_block+="
+--- $ctx_file ---
+$file_content
+"
+  fi
+done
+
+# =============================================================================
+# Prompt Construction
+# =============================================================================
+
+prompt="You are a senior staff engineer and product architect performing an ADVERSARIAL design review. Your job is to find flaws, gaps, and risks that the original designer may have missed. Be tough but constructive.
+
+## Design Artifacts Under Review
+
+The following documents describe a planned feature, its architecture, task breakdown, and/or UI/UX design. Review them critically.
+
+$design_block
+
+## Review Dimensions
+
+Analyze across these four dimensions:
+
+### 1. Architecture Flaws
+- Wrong patterns or mismatched abstractions for the problem
+- Scalability bottlenecks or single points of failure
+- Over-engineering (unnecessary complexity) or under-engineering (missing critical pieces)
+- Dependency issues, coupling problems, or violated separation of concerns
+- Data model problems, missing migrations, or schema design issues
+
+### 2. Missing Edge Cases
+- Unhandled error states, failure modes, or degraded-service scenarios
+- Race conditions, concurrency issues, or timing dependencies
+- Empty states, boundary conditions, overflow/underflow
+- Permission/authorization gaps
+- Data validation holes at system boundaries
+- Offline/network-failure scenarios
+
+### 3. UX/Design Gaps
+- Missing user flows or dead-end states
+- Accessibility (a11y) issues or violations
+- Loading, error, and empty state designs
+- Mobile/responsive considerations
+- Inconsistency with existing UI patterns in the project
+- Missing feedback for user actions (confirmations, progress indicators)
+- Internationalization or localization gaps
+
+### 4. Task Plan Completeness
+- Missing implementation steps or wrong sequencing
+- Unrealistic scope for a single task/PR
+- Missing test coverage (unit, integration, e2e)
+- Missing migration or deployment steps
+- Undeclared dependencies between tasks
+- Missing documentation or changelog updates
+
+## Output Format
+
+For each finding, use this format:
+
+### [SEVERITY] Title
+- **Dimension:** Architecture | Edge Cases | UX/Design | Task Plan
+- **Location:** Which document/section this relates to
+- **Problem:** What's wrong or missing and why it matters.
+- **Recommendation:** Concrete, actionable fix.
+
+Severity levels:
+- **CRITICAL** — Fundamental flaw that would cause failure, data loss, or security breach if shipped as designed.
+- **WARNING** — Significant gap that would cause bugs, poor UX, or technical debt.
+- **SUGGESTION** — Improvement that would meaningfully increase quality.
+- **PRAISE** — Something done particularly well that should be preserved.
+
+## Rules
+- Be adversarial. Assume things WILL go wrong and find where.
+- Be specific. Reference exact sections, decisions, or task descriptions.
+- Be constructive. Every criticism must include a concrete recommendation.
+- Be proportional. Do not nitpick formatting if there are architectural flaws.
+- If the design is solid, say so. Do not manufacture issues.
+- Focus on the DESIGN and PLAN, not on code style or implementation details.
+- Think about what's MISSING, not just what's present.
+- $FS_BOUNDARY
+
+## Summary
+
+End your review with:
+
+### Summary
+- **Total findings:** X critical, Y warnings, Z suggestions, W praise
+- **Top 3 risks:** The three most important things to address before implementation.
+- **Overall assessment:** Is this design ready for implementation, needs revisions, or needs a fundamental rethink?
+- **Confidence level:** How confident are you that this design will succeed if implemented as-is? (Low / Medium / High)
+"
+
+# Append project context if gathered
+if [[ -n "$context_block" ]]; then
+  prompt+="
+## Project Context (Background Only — Do NOT Review)
+
+The following project files provide context about the codebase conventions, dependencies, and architecture. Use them only to understand the project's existing patterns.
+
+$context_block"
+fi
+
+# =============================================================================
+# Codex Invocation
+# =============================================================================
+
+# codex exec loads every MCP server from ~/.codex/config.toml. This review needs
+# none of them, and OAuth-backed ones (e.g. Linear) cannot complete their auth
+# handshake headlessly — they emit "Auth(AuthorizationRequired)" and burn context
+# on tool descriptions. Disable whatever is configured, whatever it is.
+mcp_args=()
+codex_config="${CODEX_HOME:-$HOME/.codex}/config.toml"
+if [[ -f "$codex_config" ]]; then
+  while IFS= read -r mcp_server; do
+    [[ -n "$mcp_server" ]] && mcp_args+=(-c "mcp_servers.${mcp_server}.enabled=false")
+  done < <(grep -oE '^\[mcp_servers\.[^]]+\]' "$codex_config" \
+           | sed -e 's/^\[mcp_servers\.//' -e 's/\]$//' -e 's/^"//' -e 's/"$//')
+fi
+
+# Build codex command. --skip-git-repo-check: design docs often live in plain
+# directories (notes, planning repos) that codex would otherwise refuse to enter.
+codex_args=(
+  "$codex_bin" exec
+  --sandbox read-only
+  --skip-git-repo-check
+  -C "$target_dir"
+)
+
+# Only pass -m when the caller asked for a specific model; otherwise let codex
+# use its configured default.
+if [[ -n "$model" ]]; then
+  codex_args+=(-m "$model")
+fi
+
+# Guarded: expanding an empty array under `set -u` errors on bash 3.2 (macOS).
+if [[ ${#mcp_args[@]} -gt 0 ]]; then
+  codex_args+=("${mcp_args[@]}")
+fi
+
+# Add output file flag if specified
+if [[ -n "$output_file" ]]; then
+  codex_args+=(-o "$output_file")
+fi
+
+# Pass prompt via stdin; capture codex's own exit status from the pipeline
+set +e
+printf '%s' "$prompt" | "${codex_args[@]}" -
+status=${PIPESTATUS[1]}
+set -e
+
+exit "$status"

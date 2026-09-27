@@ -5,7 +5,7 @@ description: Triage open tracker tasks that belong to no epic, estimate ROI, and
 
 Triage open tasks/issues that don't belong to an epic (or were opened as follow-ups from past planned work), and recommend where they should go.
 
-> **Tracker:** Check the project's CLAUDE.md for whether task tracking is **Beads** (`bd` CLI) or **Linear** (`mcp__linear-server__*` tools; team/workspace named there). CLAUDE.md is authoritative — a leftover `.beads/` dir may remain after a migration, so don't infer from directories. Mapping: epic ↔ Linear project or parent issue; task ↔ issue/sub-issue. Run every tracker read/write below through that tracker.
+> **Tracker:** Check the project's CLAUDE.md for whether task tracking is **Beads** (`bd` CLI) or **Linear** (the Linear MCP tools; team/workspace named there). CLAUDE.md is authoritative — a leftover `.beads/` dir may remain after a migration, so don't infer from directories. Mapping: epic ↔ Linear project or parent issue; task ↔ issue/sub-issue. Run every tracker read/write below through that tracker.
 
 1/ Identify all the open tasks/issues that do not belong to an epic and/or were opened as follow-ups from past planned work. Make sure these are NOT in-progress.
 2/ Review these items, estimate their ROI

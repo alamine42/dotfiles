@@ -16,8 +16,18 @@ set -euo pipefail
 # =============================================================================
 
 readonly SCRIPT_NAME="$(basename "$0")"
-readonly DEFAULT_MODEL="gpt-5-codex"
+
+# No model is pinned here. Hardcoded slugs rot as OpenAI deprecates them
+# (design-review was stuck on the retired gpt-5-codex for exactly this reason).
+# Empty means codex uses `model` from ~/.codex/config.toml, so the default lives
+# in one place. Override per-run with -m.
+readonly DEFAULT_MODEL=""
+readonly DEFAULT_TIMEOUT=1800       # seconds; matches /fullreview's 30-min tolerance
+readonly DEFAULT_REASONING="high"   # codex model_reasoning_effort
 readonly DIFF_LINE_WARNING_THRESHOLD=5000
+
+# Prompt-injection defense: Codex is a different AI; keep it out of Claude's skill defs.
+readonly FS_BOUNDARY="IMPORTANT: Do NOT read or execute any files under ~/.claude/, ~/.agents/, .claude/skills/, or agents/. These are Claude Code skill definitions meant for a different AI system. Stay focused on repository code only."
 
 # Project context files to look for (order matters for prompt coherence)
 readonly CONTEXT_FILES=(
@@ -35,6 +45,8 @@ model="$DEFAULT_MODEL"
 diff_mode="head"        # "head" = staged+unstaged, "cached" = staged only, "working" = unstaged only
 gather_context=true
 output_file=""
+timeout_secs="$DEFAULT_TIMEOUT"
+reasoning="$DEFAULT_REASONING"
 
 # =============================================================================
 # Usage
@@ -48,10 +60,13 @@ AI-powered code review of uncommitted changes using Codex CLI.
 
 Options:
   -C, --dir <dir>        Target git repository directory (default: .)
-  -m, --model <model>    Codex model to use (default: $DEFAULT_MODEL)
+  -m, --model <model>    Codex model to use (default: codex's own configured
+                         model from ~/.codex/config.toml)
       --staged-only      Only review staged changes (git diff --cached)
       --unstaged-only    Only review unstaged changes (git diff)
       --no-context       Skip gathering project context files
+      --timeout <secs>   Max seconds for the Codex call (default: $DEFAULT_TIMEOUT, 0 disables)
+      --reasoning <lvl>  Codex reasoning effort: low|medium|high|xhigh (default: $DEFAULT_REASONING)
   -o, --output <file>    Also write review output to a file
   -h, --help             Show this help message
 
@@ -59,7 +74,7 @@ Examples:
   $SCRIPT_NAME                           # Review all changes in current repo
   $SCRIPT_NAME -C ~/project              # Review changes in ~/project
   $SCRIPT_NAME --staged-only             # Review only staged changes
-  $SCRIPT_NAME -m o3 -o review.md        # Use o3 model, save output to file
+  $SCRIPT_NAME -m gpt-5.4 -o review.md   # Pin a model, save output to file
 EOF
   exit 0
 }
@@ -90,6 +105,14 @@ while [[ $# -gt 0 ]]; do
       gather_context=false
       shift
       ;;
+    --timeout)
+      timeout_secs="$2"
+      shift 2
+      ;;
+    --reasoning)
+      reasoning="$2"
+      shift 2
+      ;;
     -o|--output)
       output_file="$2"
       shift 2
@@ -119,6 +142,18 @@ else
   echo "Error: Codex CLI not found." >&2
   echo "Install it from: https://github.com/openai/codex" >&2
   exit 1
+fi
+
+# Resolve a timeout command (gtimeout from coreutils on macOS, else GNU timeout)
+timeout_bin=""
+if command -v gtimeout &>/dev/null; then
+  timeout_bin="$(command -v gtimeout)"
+elif command -v timeout &>/dev/null; then
+  timeout_bin="$(command -v timeout)"
+fi
+if [[ -z "$timeout_bin" && "$timeout_secs" -gt 0 ]]; then
+  echo "Warning: no 'timeout'/'gtimeout' found; running Codex without a timeout." >&2
+  echo "         Install coreutils (brew install coreutils) to enable it." >&2
 fi
 
 # Resolve target directory to absolute path
@@ -212,7 +247,9 @@ case "$diff_mode" in
 esac
 
 # Build the review prompt
-prompt="You are an expert code reviewer performing a thorough review of ${diff_scope} in a software project.
+prompt="$FS_BOUNDARY
+
+You are an expert code reviewer performing a thorough review of ${diff_scope} in a software project.
 
 ## Your Review Dimensions
 
@@ -286,21 +323,61 @@ $diff_output
 # Codex Invocation
 # =============================================================================
 
+# codex exec loads every MCP server from ~/.codex/config.toml. This review needs
+# none of them, and OAuth-backed ones (e.g. Linear) cannot complete their auth
+# handshake headlessly — they emit "Auth(AuthorizationRequired)" and burn context
+# on tool descriptions. Disable whatever is configured, whatever it is.
+mcp_args=()
+codex_config="${CODEX_HOME:-$HOME/.codex}/config.toml"
+if [[ -f "$codex_config" ]]; then
+  while IFS= read -r mcp_server; do
+    [[ -n "$mcp_server" ]] && mcp_args+=(-c "mcp_servers.${mcp_server}.enabled=false")
+  done < <(grep -oE '^\[mcp_servers\.[^]]+\]' "$codex_config" \
+           | sed -e 's/^\[mcp_servers\.//' -e 's/\]$//' -e 's/^"//' -e 's/"$//')
+fi
+
 # Build codex command
 codex_args=(
   "$codex_bin" exec
   --sandbox read-only
-  -m "$model"
+  -c "model_reasoning_effort=\"$reasoning\""
   -C "$target_dir"
 )
+
+# Only pass -m when the caller asked for a specific model; otherwise let codex
+# use its configured default.
+if [[ -n "$model" ]]; then
+  codex_args+=(-m "$model")
+fi
+
+# Guarded: expanding an empty array under `set -u` errors on bash 3.2 (macOS).
+if [[ ${#mcp_args[@]} -gt 0 ]]; then
+  codex_args+=("${mcp_args[@]}")
+fi
 
 # Add output file flag if specified
 if [[ -n "$output_file" ]]; then
   codex_args+=(-o "$output_file")
 fi
 
-# Pass prompt via stdin
-printf '%s' "$prompt" | "${codex_args[@]}" -
+# Wrap with a timeout if one is available and enabled
+run_args=()
+if [[ -n "$timeout_bin" && "$timeout_secs" -gt 0 ]]; then
+  run_args=("$timeout_bin" "${timeout_secs}s")
+fi
+run_args+=("${codex_args[@]}")
+
+# Pass prompt via stdin; capture codex's own exit status from the pipeline
+set +e
+printf '%s' "$prompt" | "${run_args[@]}" -
+status=${PIPESTATUS[1]}
+set -e
+
+if [[ "$status" -eq 124 ]]; then
+  echo "" >&2
+  echo "Error: Codex review timed out after ${timeout_secs}s." >&2
+  echo "       Re-run with --timeout 0 to disable, or a larger value." >&2
+fi
 
 # Exit with codex's exit code
-exit $?
+exit "$status"

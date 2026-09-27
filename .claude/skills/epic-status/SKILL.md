@@ -6,7 +6,7 @@ disable-model-invocation: true
 
 Review the current work-in-progress epic: issue statuses, priorities, direction, and next steps.
 
-> **Tracker:** Check the project's CLAUDE.md for whether task tracking is **Beads** (`bd` CLI) or **Linear** (`mcp__linear-server__*` tools; team/workspace named there). CLAUDE.md is authoritative — a leftover `.beads/` dir may remain after a migration, so don't infer from directories. Mapping: epic ↔ Linear project or parent issue; task ↔ issue/sub-issue. Run every tracker read/write below through that tracker.
+> **Tracker:** Check the project's CLAUDE.md for whether task tracking is **Beads** (`bd` CLI) or **Linear** (the Linear MCP tools; team/workspace named there). CLAUDE.md is authoritative — a leftover `.beads/` dir may remain after a migration, so don't infer from directories. Mapping: epic ↔ Linear project or parent issue; task ↔ issue/sub-issue. Run every tracker read/write below through that tracker.
 
 1. Identify the current work-in-progress epic/project and review all its issues
 2. Update any stale issue statuses (e.g. if something is in progress but marked as open, mark it correctly)

@@ -6,7 +6,7 @@ disable-model-invocation: true
 
 I want to queue up development of a feature. Ask me to summarize the description of this feature in 1-2 sentences, first.
 
-> **Tracker:** Check the project's CLAUDE.md for whether task tracking is **Beads** (`bd` CLI) or **Linear** (`mcp__linear-server__*` tools; team/workspace named there). CLAUDE.md is authoritative — a leftover `.beads/` dir may remain after a migration, so don't infer from directories. Mapping: epic ↔ Linear project or parent issue; task ↔ issue/sub-issue. Run every tracker read/write below through that tracker.
+> **Tracker:** Check the project's CLAUDE.md for whether task tracking is **Beads** (`bd` CLI) or **Linear** (the Linear MCP tools; team/workspace named there). CLAUDE.md is authoritative — a leftover `.beads/` dir may remain after a migration, so don't infer from directories. Mapping: epic ↔ Linear project or parent issue; task ↔ issue/sub-issue. Run every tracker read/write below through that tracker.
 
 Then use this description to identify whether an epic or task already exists in the tracker for this feature. make sure that task description comprehensively encompasses everything what the feature I'm talking about. If there are any gaps, identify them.
 
