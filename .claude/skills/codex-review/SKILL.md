@@ -1,7 +1,6 @@
 ---
 name: codex-review
-description: Run the codex-review script for an independent Codex CLI review of uncommitted changes. Paid (OpenAI API).
-disable-model-invocation: true
+description: Run the codex-review script for an independent Codex CLI review of uncommitted changes. Paid (OpenAI API). Run only when the user asks for it or another skill calls it; never on your own initiative.
 ---
 
 Run the codex-review script to get an independent AI code review (via Codex CLI) of the current uncommitted changes.

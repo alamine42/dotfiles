@@ -1,7 +1,6 @@
 ---
 name: ux-brainstorm
-description: Shape a feature with local dev prototypes, screen-by-screen flows, and design variants the user can annotate and pick from.
-disable-model-invocation: true
+description: Shape a feature with local dev prototypes, screen-by-screen flows, and design variants the user can annotate and pick from. Run only when the user asks for it or another skill calls it; never on your own initiative.
 ---
 
 Let's use local dev prototype(s) in order to figure out the shape of the feature/project. 

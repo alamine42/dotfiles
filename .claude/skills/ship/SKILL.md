@@ -1,6 +1,6 @@
 ---
 name: ship
-description: Post-development workflow that runs parallel code review, simplification, and security review, then implements agreed fixes, runs final tests, commits, and closes the Beads task. Use after unit tests pass on a feature or bug fix.
+description: Post-development workflow that runs parallel code review, simplification, and security review, then implements agreed fixes, runs final tests, commits, and closes the Beads task. Run only when the user asks for it or another skill calls it; never on your own initiative.
 allowed-tools: Bash, Read, Edit, Write, Grep, Glob, Task, AskUserQuestion
 ---
 

@@ -1,7 +1,6 @@
 ---
 name: improve-ux-feature
-description: Push the current feature's UI/UX to world-class polish, optimizing desktop and mobile separately, with the frontend-design skill.
-disable-model-invocation: true
+description: Push the current feature's UI/UX to world-class polish, optimizing desktop and mobile separately, with the frontend-design skill. Run only when the user asks for it or another skill calls it; never on your own initiative.
 ---
 
 I still think there are strong opportunities to enhance the UI/UX look and feel of this feature, and to make everything work better and be more intuitive, user-friendly, visually appealing, polished, slick, and world class in terms of following UI/UX best practices like those used by Stripe, don't you agree? And I want you to carefully consider desktop UI/UX and mobile UI/UX separately while doing this and hyper-optimize for both separately to play to the specifics of each modality. I'm looking for true world-class visual appeal, polish, slickness, etc. that makes people gasp at how stunning and perfect it is in every way.  Use the frontend-design skill. And use the frontend engineer sub-agent if one is configured.
