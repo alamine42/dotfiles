@@ -6,7 +6,10 @@ Minimal dotfiles for remote development with Claude Code on a DigitalOcean dropl
 
 | File | Purpose |
 |------|---------|
-| `.zshrc` | Shell config with aliases and helpers |
+| `.zshrc` | Loader: sources `zsh/common.zsh`, then the profile file |
+| `zsh/common.zsh` | Shell config shared by every machine |
+| `zsh/server.zsh` | Cloud server profile: tmux, sessionizer, ntfy |
+| `zsh/laptop.zsh` | Laptop profile: a Mac used directly, no ssh or tmux |
 | `.tmux.conf` | Mobile-optimized tmux (Ctrl-a prefix, mouse support) |
 | `.gitconfig` | Git settings and aliases |
 | `starship.toml` | Minimal prompt config |
@@ -22,6 +25,20 @@ git clone git@github.com:YOUR_USERNAME/dotfiles.git ~/.dotfiles
 ~/.dotfiles/install.sh
 source ~/.zshrc
 ```
+
+### Profiles
+
+The installer has two profiles. `server` is the default.
+
+```bash
+~/.dotfiles/install.sh                    # cloud dev server
+~/.dotfiles/install.sh --profile laptop   # a Mac used directly
+```
+
+The installer writes the profile name to `~/.config/dotfiles/profile`. `~/.zshrc` reads it.
+The laptop profile does not install tmux, starship, micro, or sessionizer.
+
+Put secrets and machine-only settings in `~/.zshrc.local`. Git never sees that file.
 
 ## Key Features
 
@@ -64,7 +81,7 @@ cn     → claude-notify (sends push when done)
 
 Set your ntfy topic:
 ```bash
-echo 'export NTFY_TOPIC=my-secret-topic' >> ~/.zshrc
+echo 'export NTFY_TOPIC=my-secret-topic' >> ~/.zshrc.local
 ```
 
 Then use `cn` (claude-notify) to get push notifications when tasks complete.

@@ -4,9 +4,23 @@
 #
 # Usage:
 #   git clone git@github.com:YOU/dotfiles.git ~/.dotfiles
-#   ~/.dotfiles/install.sh
+#   ~/.dotfiles/install.sh                    # cloud dev server (default)
+#   ~/.dotfiles/install.sh --profile laptop   # a Mac used directly, no tmux
 
 set -euo pipefail
+
+PROFILE="server"
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --profile) PROFILE="${2:-}"; shift 2 ;;
+        --profile=*) PROFILE="${1#*=}"; shift ;;
+        *) echo "Unknown argument: $1"; exit 1 ;;
+    esac
+done
+if [[ "$PROFILE" != "server" && "$PROFILE" != "laptop" ]]; then
+    echo "Error: --profile must be 'server' or 'laptop'"
+    exit 1
+fi
 
 DOTFILES="${DOTFILES:-$HOME/.dotfiles}"
 
@@ -17,7 +31,7 @@ else
     BINDIR="${BINDIR:-$HOME/bin}"
 fi
 
-echo "Installing dotfiles from $DOTFILES..."
+echo "Installing dotfiles from $DOTFILES (profile: $PROFILE)..."
 
 # Ensure we're in the right place
 if [[ ! -f "$DOTFILES/install.sh" ]]; then
@@ -27,7 +41,8 @@ if [[ ! -f "$DOTFILES/install.sh" ]]; then
 fi
 
 # ----- Dependency Installation -----
-DEPS=(fzf tmux)  # starship and micro installed separately
+# Only the server profile needs these: the laptop profile has no tmux,
+# sessionizer, starship, or micro.
 
 install_deps_apt() {
     echo ""
@@ -85,12 +100,19 @@ install_dependencies() {
     fi
 }
 
-install_dependencies
+if [[ "$PROFILE" == "server" ]]; then
+    install_dependencies
+fi
 
 # Create necessary directories
-mkdir -p "$HOME/.config"
+mkdir -p "$HOME/.config/dotfiles"
 mkdir -p "$BINDIR"
-mkdir -p "$HOME/projects"
+if [[ "$PROFILE" == "server" ]]; then
+    mkdir -p "$HOME/projects"
+fi
+
+# ~/.zshrc reads this file to pick the profile.
+echo "$PROFILE" > "$HOME/.config/dotfiles/profile"
 
 # Backup existing files
 backup_if_exists() {
@@ -118,15 +140,21 @@ link_file() {
 echo ""
 echo "Linking dotfiles..."
 link_file "$DOTFILES/.zshrc" "$HOME/.zshrc"
-link_file "$DOTFILES/.tmux.conf" "$HOME/.tmux.conf"
 link_file "$DOTFILES/.gitconfig" "$HOME/.gitconfig"
 link_file "$DOTFILES/.gitignore_global" "$HOME/.gitignore_global"
-link_file "$DOTFILES/starship.toml" "$HOME/.config/starship.toml"
+if [[ "$PROFILE" == "server" ]]; then
+    link_file "$DOTFILES/.tmux.conf" "$HOME/.tmux.conf"
+    link_file "$DOTFILES/starship.toml" "$HOME/.config/starship.toml"
+fi
 
 echo ""
 echo "Linking scripts..."
 echo "  Target: $BINDIR"
-for script in sessionizer codex-review design-review claude-audit; do
+SCRIPTS=(codex-review design-review claude-audit)
+if [[ "$PROFILE" == "server" ]]; then
+    SCRIPTS+=(sessionizer)
+fi
+for script in "${SCRIPTS[@]}"; do
     link_file "$DOTFILES/bin/$script" "$BINDIR/$script"
     chmod +x "$DOTFILES/bin/$script"
 done
@@ -173,7 +201,12 @@ echo ""
 echo "Done!"
 echo ""
 echo "Next steps:"
-echo "  1. Reload shell: source ~/.zshrc"
-echo "  2. Set ntfy topic: echo 'export NTFY_TOPIC=your-topic' >> ~/.zshrc"
-echo "  3. Start a project: sessionizer"
+echo "  1. Put secrets and machine-only settings in ~/.zshrc.local"
+if [[ "$PROFILE" == "server" ]]; then
+    echo "  2. Set ntfy topic: echo 'export NTFY_TOPIC=your-topic' >> ~/.zshrc.local"
+    echo "  3. Reload shell: source ~/.zshrc"
+    echo "  4. Start a project: sessionizer"
+else
+    echo "  2. Reload shell: source ~/.zshrc"
+fi
 echo ""
