@@ -1,6 +1,6 @@
 ---
 name: ship
-description: Post-development workflow that runs parallel code review, simplification, and security review, then implements agreed fixes, runs final tests, commits, and closes the Beads task. Run only when the user asks for it or another skill calls it; never on your own initiative.
+description: Post-development workflow that runs parallel code review, simplification, and security review, then implements agreed fixes, runs final tests, commits, and closes the tracker task (Beads or Linear). Run only when the user asks for it or another skill calls it; never on your own initiative.
 allowed-tools: Bash, Read, Edit, Write, Grep, Glob, Task, AskUserQuestion
 ---
 
@@ -53,25 +53,37 @@ Unit tests pass → /ship
 │  PHASE 6: Commit & Close            │
 │  • Auto-generate commit message     │
 │  • Git commit and push              │
-│  • Close Beads task, sync to Linear │
+│  • Close task in the tracker        │
 │  • Show next available tasks        │
 └─────────────────────────────────────┘
 ```
 
 ---
 
-## PHASE 0: Detect Current Task
+## PHASE 0: Detect Tracker and Current Task
 
-Auto-detect the current Beads task:
+### Resolve the tracker
 
+Check the project's CLAUDE.md for the tracker. It is authoritative — a leftover `.beads/` dir may remain after a migration, so don't infer from directories. Store `TRACKER` as one of:
+- `beads` — Beads only (`bd` CLI)
+- `beads+linear` — Beads with Linear sync (`bd linear sync`)
+- `linear` — Linear only, through the Linear MCP tools (team/workspace named in CLAUDE.md)
+
+If CLAUDE.md names no tracker, ask the user. Every later tracker step branches on `TRACKER`. Mapping: epic ↔ Linear project or parent issue; task ↔ issue/sub-issue.
+
+### Find the current task
+
+**Beads / beads+linear:**
 ```bash
-# Get current task from Beads
 bd list --status in_progress --format json 2>/dev/null || bd list --format json 2>/dev/null | head -20
 ```
 
-Parse the output to find the task that's in progress. Store:
-- `TASK_ID` - the Beads task ID
+**Linear:** list issues assigned to the current user in the project's team with a started state (e.g. "In Progress"). If the branch name contains an issue key (e.g. `eng-123-...`), prefer that issue.
+
+Store:
+- `TASK_ID` - the Beads ID or Linear issue key (e.g. `ENG-123`)
 - `TASK_TITLE` - the task title/subject
+- `TASK_PARENT` - the epic: Beads epic, or Linear project / parent issue (if any)
 
 If multiple tasks are in progress or none found, ask the user which task this work is for.
 
@@ -209,7 +221,7 @@ Ask user:
 
 Store user decisions:
 - `IMPLEMENT_NOW` - list of items to fix
-- `CREATE_TASKS` - list of items to create as new Beads tasks
+- `CREATE_TASKS` - list of items to create as new tracker tasks
 
 ---
 
@@ -223,9 +235,8 @@ For each item in `IMPLEMENT_NOW`:
 
 For each item in `CREATE_TASKS`:
 
-```bash
-bd add "[Security] <issue description>" --epic <current-epic-if-known>
-```
+- **Beads / beads+linear:** `bd add "[Security] <issue description>" --epic <TASK_PARENT-if-known>`
+- **Linear:** create an issue titled `[Security] <issue description>` in the same team, under `TASK_PARENT` (same project, or as a sub-issue of the parent), with a Security label if the team has one. Put the finding, file anchors and suggested fix in the description.
 
 Report progress as you go.
 
@@ -401,7 +412,7 @@ Use information gathered from:
 - `TASK_TITLE` and `TASK_ID`
 - `CHANGED_FILES` analysis
 - Review findings from Phase 1 (what issues were found and fixed)
-- The Beads task description if available
+- The tracker task description if available
 - Any existing specs or PRDs in the repo
 
 For sections you can't fully populate (like "Prior Art"), make a best effort or mark as "TBD - to be filled by developer".
@@ -471,7 +482,7 @@ Format:
 <any notable fixes from review>
 
 Closes: <TASK_ID>
-Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
+<attribution trailer, if the harness specifies one>
 ```
 
 Where `<type>` is: feat, fix, refactor, chore, docs, test
@@ -493,18 +504,18 @@ git push origin HEAD
 
 ### Close Task
 
-```bash
-bd close $TASK_ID
-bd linear sync --push
-```
+- **Beads:** `bd close $TASK_ID`
+- **beads+linear:** `bd close $TASK_ID`, then `bd linear sync --push`
+- **Linear:** set the issue to the team's completed state (e.g. "Done"). Add a comment with the commit SHA, branch, and PR link if one exists. If the team's GitHub integration closes issues on merge, still set the state, since this push may not merge.
+
+Re-read the task to confirm the close landed.
 
 ### Show Next Tasks
 
 List upcoming tasks so the user knows what's next:
 
-```bash
-bd list --status pending --limit 5
-```
+- **Beads / beads+linear:** `bd list --status pending --limit 5`
+- **Linear:** up to 5 unstarted issues (Todo/Backlog) in `TASK_PARENT`, or the team if there is none, ordered by priority
 
 Store as `NEXT_TASKS` for the final report.
 
@@ -525,7 +536,7 @@ Show summary:
 📚 Solution doc: docs/solutions/<category>/<slug>.md (if created)
 🧪 Tests: passing
 📤 Pushed to: <branch>
-✔️ Task closed in Beads + Linear
+✔️ Task closed in <tracker>
 
 New tasks created:
 - <task-id>: <description>
@@ -550,12 +561,12 @@ If any phase fails critically:
 Common failures:
 - Tests fail after fixes → Show error, ask user how to proceed
 - Git push fails → Check branch protection, auth issues
-- Beads command fails → Suggest manual task closure
+- Tracker command fails (`bd` or Linear) → Report the error and suggest manual task closure
 
 ---
 
 ## Notes
 
-- This skill assumes the project uses Beads for task management with Linear sync
+- Works with Beads, Beads with Linear sync, or Linear alone — CLAUDE.md decides which
 - Adjust paths (e.g., `cd backend`) based on project structure
 - The skill is designed for the Alkemy project but works generically
