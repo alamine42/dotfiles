@@ -39,6 +39,7 @@ alias mkenv='python3 -m venv venv'
 # ----- Shell config aliases -----
 alias bp='${EDITOR:-vi} ~/.zshrc'
 alias sbp='source ~/.zshrc'
+alias dotup='"$DOTFILES_DIR/install.sh" && source ~/.zshrc'
 
 # ----- Git aliases -----
 alias gs='git status'

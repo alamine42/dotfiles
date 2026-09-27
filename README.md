@@ -40,6 +40,18 @@ The laptop profile does not install tmux, starship, micro, or sessionizer.
 
 Put secrets and machine-only settings in `~/.zshrc.local`. Git never sees that file.
 
+### Updating
+
+Run the installer again, or use the `dotup` alias. The installer does these steps:
+
+1. It pulls the repo with a fast-forward pull. It skips the pull when you have local changes.
+2. It keeps the saved profile. Pass `--profile` only to switch.
+3. It links new files and skips links that are already correct.
+4. It removes links for files that left the repo or that the profile does not use.
+
+Existing files are backed up to `<file>.bak`. An older backup is never overwritten.
+Pass `--no-pull` to update links without pulling.
+
 ## Key Features
 
 ### Sessionizer
