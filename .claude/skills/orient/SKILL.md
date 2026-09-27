@@ -1,0 +1,17 @@
+---
+name: orient
+description: "Get oriented in a project: read HANDOVER.md if recent, otherwise README, CLAUDE.md, architecture docs, environments and past decisions. Use at the start of a session or when the user asks to get up to speed."
+---
+
+# orient
+If there is a HANDOVER.md file that's been recently updated, read that file and skip to step 8. Otherwise start from step 1.
+
+1. Read the entire @README.md (if it exists) to understand project goals and structure
+2. Review CLAUDE.md for my specific coding style, tools, and conventions
+3. If there is a docs/architecture.md or similar, read that too
+4. Review the overall architecture , key files, the main directories and their purposes. See if any learned lessons and decisions have been documented before, try in docs/ but also elsewhere.
+5. Review the various environments (dev/stg/prod) and deployment instructions
+6. Review git status, compare current branch against main to understand the differences. Peform a git pull if appropriate.
+7. Review the list of open or in-progress tasks
+8. Summarize in a concise "Current orientation" block
+9. Confirm you're ready to continue
