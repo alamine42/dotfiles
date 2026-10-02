@@ -4,9 +4,7 @@ description: >-
   Explain a confusing passage, term, or concept in plain language, with one visual.
   Use when the user pastes a sentence they do not understand, asks "what does this
   mean", "explain this", "ELI5", "what is X", "unpack this paragraph", or double-clicks
-  on jargon from an article, paper, contract, spec, or docs page. The lay-terms
-  companion to show-me: show-me draws technical concepts for engineers, explain-this
-  translates technical concepts for humans. Triggers on explain this, ELI5, what does
+  on jargon from an article, paper, contract, spec, or docs page. Triggers on explain this, ELI5, what does
   this mean, in plain English, unpack this, jargon, I don't understand this sentence.
 ---
 

@@ -1,5 +1,5 @@
 ---
-name: ux-brainstorm
+name: show-me
 description: Shape a feature with local dev prototypes, screen-by-screen flows, and design variants the user can annotate and pick from. Run only when the user asks for it or another skill calls it; never on your own initiative.
 ---
 
